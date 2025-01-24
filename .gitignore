@@ -1,2 +1,2 @@
 .DS_Store
-pygame_env.cpython-311.pyc
+env/__pycache__/*
