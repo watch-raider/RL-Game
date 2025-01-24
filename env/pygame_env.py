@@ -1,19 +1,12 @@
-import random
-from copy import copy
-
 from gymnasium.spaces import Discrete
-
-from pettingzoo import ParallelEnv
 import pygame
 
+import random
 from enum import Enum
 import time
 
 import numpy as np
 import gymnasium as gym
-
-SCREEN_WIDTH = 400
-SCREEN_HEIGHT = 300
 
 LIGHT_OFF = (180, 180, 180)
 LIGHT_ON = (255, 165, 0)
@@ -32,12 +25,12 @@ class AgentAction(Enum):
     LIGHT_DOWN_ON = 11
     LIGHT_DOWN_OFF = 12
 
-class PygameEnvironment(ParallelEnv):
+class PygameEnvironment(gym.Env):
     metadata = {
         "name": "custom_environment_v0",
     }
 
-    def __init__(self):
+    def __init__(self, SCREEN_WIDTH, SCREEN_HEIGHT):
         self.goal = None
         self.human = None
         self.agent = None
@@ -49,6 +42,8 @@ class PygameEnvironment(ParallelEnv):
         self.score = 0
         self.font = pygame.font.Font(None, 36)
         self.current_time = time.time()
+        self.screen_width = SCREEN_WIDTH
+        self.screen_height = SCREEN_HEIGHT
 
         self.human_colour = (255, 0, 0)  # Red for human
         self.agent_colour = (0, 0, 255)  # Blue for agent
@@ -66,8 +61,8 @@ class PygameEnvironment(ParallelEnv):
         
 
     def reset(self):
-        positions_x = [x for x in range(0, SCREEN_WIDTH, 50)] 
-        positions_y = [x for x in range(0, SCREEN_HEIGHT, 50)] 
+        positions_x = [x for x in range(0, self.screen_width, 50)] 
+        positions_y = [x for x in range(0, self.screen_height, 50)] 
 
         # Generate non-overlapping positions for human, agent, and goal
         while True:
@@ -92,11 +87,11 @@ class PygameEnvironment(ParallelEnv):
         # Execute actions
         if action == AgentAction.MOVE_LEFT.value and self.agent.centerx > 25:
             self.agent.move_ip(-50, 0)
-        elif action == AgentAction.MOVE_RIGHT.value and self.agent.centerx < SCREEN_WIDTH - 25:
+        elif action == AgentAction.MOVE_RIGHT.value and self.agent.centerx < self.screen_width - 25:
             self.agent.move_ip(50, 0)
         elif action == AgentAction.MOVE_UP.value and self.agent.centery > 25:
             self.agent.move_ip(0, -50)
-        elif action == AgentAction.MOVE_DOWN.value and self.agent.centery < SCREEN_HEIGHT - 25:
+        elif action == AgentAction.MOVE_DOWN.value and self.agent.centery < self.screen_height - 25:
             self.agent.move_ip(0, 50)
         elif action == AgentAction.LIGHT_UP_ON.value:
             self.light_t = LIGHT_ON
@@ -165,11 +160,11 @@ class PygameEnvironment(ParallelEnv):
     def handle_human(self, event):
         if event.key == pygame.K_LEFT and self.human.centerx > 25:
             self.human.move_ip(-50, 0)
-        elif event.key == pygame.K_RIGHT and self.human.centerx < SCREEN_WIDTH - 25:
+        elif event.key == pygame.K_RIGHT and self.human.centerx < self.screen_width - 25:
             self.human.move_ip(50, 0)
         elif event.key == pygame.K_UP and self.human.centery > 25:
             self.human.move_ip(0, -50)
-        elif event.key == pygame.K_DOWN and self.human.centery < SCREEN_HEIGHT - 25:
+        elif event.key == pygame.K_DOWN and self.human.centery < self.screen_height - 25:
             self.human.move_ip(0, 50)
 
     def calculate_location(self, target):
@@ -182,8 +177,8 @@ class PygameEnvironment(ParallelEnv):
         return abs(origin_row - target_row) + abs(origin_col - target_col)
 
     def get_current_row_col(self, target):
-        rows = range(25, SCREEN_HEIGHT, 50)
-        cols = range(25, SCREEN_WIDTH, 50)
+        rows = range(25, self.screen_height, 50)
+        cols = range(25, self.screen_width, 50)
         return rows.index(target.centery), cols.index(target.centerx)
 
     def reset_lights(self):
