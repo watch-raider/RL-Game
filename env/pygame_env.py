@@ -1,15 +1,20 @@
-from gymnasium.spaces import Discrete
 import pygame
+
+import gymnasium as gym
+from gymnasium.spaces import Discrete
 
 import random
 from enum import Enum
 import time
-
 import numpy as np
-import gymnasium as gym
 
-LIGHT_OFF = (180, 180, 180)
-LIGHT_ON = (255, 165, 0)
+# Standard RGB colors 
+RED = (255, 0, 0) 
+GREEN = (0, 255, 0) 
+BLUE = (0, 0, 255) 
+CYAN = (0, 100, 100) 
+BLACK = (0, 0, 0) 
+WHITE = (255, 255, 255) 
 
 class AgentAction(Enum):
     MOVE_LEFT = 1
@@ -29,6 +34,8 @@ class PygameEnvironment(gym.Env):
     metadata = {
         "name": "custom_environment_v0",
     }
+    LIGHT_OFF = (180, 180, 180)
+    LIGHT_ON = (255, 165, 0)
 
     def __init__(self, SCREEN_WIDTH, SCREEN_HEIGHT):
         self.goal = None
@@ -45,9 +52,9 @@ class PygameEnvironment(gym.Env):
         self.screen_width = SCREEN_WIDTH
         self.screen_height = SCREEN_HEIGHT
 
-        self.human_colour = (255, 0, 0)  # Red for human
-        self.agent_colour = (0, 0, 255)  # Blue for agent
-        self.goal_colour = (0, 0, 0)  # Green for goal
+        self.human_colour = RED  # Red for human
+        self.agent_colour = BLUE  # Blue for agent
+        self.goal_colour = BLACK  # Green for goal
         self.light_radius = 5
         self.reset_lights()
 
@@ -94,21 +101,21 @@ class PygameEnvironment(gym.Env):
         elif action == AgentAction.MOVE_DOWN.value and self.agent.centery < self.screen_height - 25:
             self.agent.move_ip(0, 50)
         elif action == AgentAction.LIGHT_UP_ON.value:
-            self.light_t = LIGHT_ON
+            self.light_t = self.LIGHT_ON
         elif action == AgentAction.LIGHT_UP_OFF.value:
-            self.light_t = LIGHT_OFF
+            self.light_t = self.LIGHT_OFF
         elif action == AgentAction.LIGHT_RIGHT_ON.value:
-            self.light_r = LIGHT_ON
+            self.light_r = self.LIGHT_ON
         elif action == AgentAction.LIGHT_RIGHT_OFF.value:
-            self.light_r = LIGHT_OFF
+            self.light_r = self.LIGHT_OFF
         elif action == AgentAction.LIGHT_DOWN_ON.value:
-            self.light_b = LIGHT_ON
+            self.light_b = self.LIGHT_ON
         elif action == AgentAction.LIGHT_DOWN_OFF.value:
-            self.light_b = LIGHT_OFF
+            self.light_b = self.LIGHT_OFF
         elif action == AgentAction.LIGHT_LEFT_ON.value:
-            self.light_l = LIGHT_ON
+            self.light_l = self.LIGHT_ON
         elif action == AgentAction.LIGHT_LEFT_OFF.value:
-            self.light_l = LIGHT_OFF
+            self.light_l = self.LIGHT_OFF
     
     def human_step(self, event):
         reward = 0
@@ -138,7 +145,7 @@ class PygameEnvironment(gym.Env):
 
     def render(self):
         """Renders the environment."""
-        self.screen.fill((0, 0, 0))
+        self.screen.fill(BLACK)
 
         pygame.draw.rect(self.screen, self.goal_colour, self.goal)
         pygame.draw.rect(self.screen, self.human_colour, self.human)
@@ -152,7 +159,7 @@ class PygameEnvironment(gym.Env):
         pygame.draw.circle(surface=self.screen, color=self.light_l, center=light_l, radius=self.light_radius)
 
         # Draw the score to the screen
-        score_text = self.font.render(f'Score: {self.score}', True, (255, 255, 255))
+        score_text = self.font.render(f'Score: {self.score}', True, WHITE)
         self.screen.blit(score_text, (5, 5))
 
         pygame.display.update()
@@ -182,10 +189,10 @@ class PygameEnvironment(gym.Env):
         return rows.index(target.centery), cols.index(target.centerx)
 
     def reset_lights(self):
-        self.light_t = (180, 180, 180)
-        self.light_r = (180, 180, 180)
-        self.light_b = (180, 180, 180)
-        self.light_l = (180, 180, 180)
+        self.light_t = self.LIGHT_OFF
+        self.light_r = self.LIGHT_OFF
+        self.light_b = self.LIGHT_OFF
+        self.light_l = self.LIGHT_OFF
 
     def set_light_xy(self):
         light_1 = (self.agent.centerx, self.agent.top+self.light_radius)

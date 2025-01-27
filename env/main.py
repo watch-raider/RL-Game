@@ -1,5 +1,5 @@
-from copy import copy
 import pygame
+import pygame_menu as pm
 
 import q_learning
 import json
@@ -10,11 +10,20 @@ from pygame_env import PygameEnvironment
 
 pygame.init()
 
-SCREEN_WIDTH = 400
-SCREEN_HEIGHT = 300
+SCREEN_SIZE = [("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
+LEARNING_MODEL = [("Q Learning", "q_learning")]
+MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
+
+# Standard RGB colors 
+RED = (255, 0, 0) 
+GREEN = (0, 255, 0) 
+BLUE = (0, 0, 255) 
+CYAN = (0, 100, 100) 
+BLACK = (0, 0, 0) 
+WHITE = (255, 255, 255) 
 
 # Training parameters
-n_training_episodes = 1  # Total training episodes
+n_training_episodes = 5  # Total training episodes
 learning_rate = 0.7  # Learning rate
 
 # Exploration parameters
@@ -22,38 +31,82 @@ max_epsilon = 1.0  # Exploration probability at start
 min_epsilon = 0.05  # Minimum exploration probability
 decay_rate = 0.0005  # Exponential decay rate for exploration prob
 
-if __name__ == "__main__":
+# game parameters
+screen_height = 500
+screen_width = 500
+model = "q_learning"
+mode = "train"
+
+def set_screen(value, selected_size):
+    global screen_width, screen_height
+    screen_width = selected_size
+    screen_height = selected_size
+
+def set_model(value, selected_model):
+    global model
+    model = selected_model
+
+def set_mode(value, selected_mode):
+    global mode
+    mode = selected_mode
+
+def main_menu():
+    screen = pygame.display.set_mode((SCREEN_SIZE[0][1],SCREEN_SIZE[0][1]))
+    #screen.fill(BLACK)
+
+    # Creating the settings menu 
+    settings = pm.Menu(title="Settings", 
+                       width=SCREEN_SIZE[0][1], 
+                       height=SCREEN_SIZE[0][1], 
+                       theme=pm.themes.THEME_GREEN) 
+    
+    settings.add.dropselect(title="SCREEN SIZE", items=SCREEN_SIZE, onchange=set_screen,
+                            dropselect_id="screen_size", default=0)
+
+    settings.add.dropselect(title="LEARNING MODEL", items=LEARNING_MODEL, onchange=set_model,
+                            dropselect_id="learning_model", default=0) 
+    
+    settings.add.dropselect(title="MODE", items=MODE, onchange=set_mode,
+                            dropselect_id="mode", default=0) 
+
+    mainMenu = pm.Menu(title="Main Menu",
+                       width=SCREEN_SIZE[0][1], 
+                       height=SCREEN_SIZE[0][1], 
+                       theme=pm.themes.THEME_GREEN)
+    
+    mainMenu.add.button(title="PLAY", action=start_game, 
+                        font_color=WHITE, background_color=GREEN) 
+    
+    # Dummy label to add some spacing between the settings button and Play button 
+    mainMenu.add.label(title="") 
+    
+    # Settings button. If clicked, it takes to the settings menu 
+    mainMenu.add.button(title="Settings", action=settings, font_color=WHITE, 
+                        background_color=BLUE) 
+  
+    # Dummy label to add some spacing between the settings button and exit button 
+    mainMenu.add.label(title="") 
+  
+    # Exit Button. If clicked, it closes the window 
+    mainMenu.add.button(title="Exit", action=pm.events.EXIT, 
+                        font_color=WHITE, background_color=RED) 
+  
+    mainMenu.mainloop(screen)
+
+def start_game():
     cwd = os.getcwd()
     json_db_path = f"{cwd}/json_db"
+    q_table_path = f"{json_db_path}/q_table.json"
 
-    env = PygameEnvironment(SCREEN_WIDTH, SCREEN_HEIGHT)
+    env = PygameEnvironment(screen_width, screen_height)
     env.reset()
     
-    q_table_path = f"{json_db_path}/q_table.json"
-    isExist = os.path.exists(q_table_path)
-    json_dict = {}
-
-    if isExist:
-        with open(q_table_path, 'r') as outfile:
-            # Reading from json file
-            json_dict = json.load(outfile)
-            key_name = f"{SCREEN_WIDTH}_{SCREEN_HEIGHT}"
-            if key_name in json_dict:
-                print(key_name, type(json_dict))
-                q_table_list = json_dict[key_name]
-                Qtable = np.array(q_table_list)
-            else:
-                Qtable = Qtable = q_learning.initialize_q_table(env.observation_space, env.action_space)
-    else:
-        Qtable = q_learning.initialize_q_table(env.observation_space, env.action_space)
-    
+    Qtable, json_dict = q_learning.set_q_table(env, q_table_path, screen_width, screen_height)
     Qtable = q_learning.train(env, n_training_episodes, min_epsilon, max_epsilon, decay_rate, Qtable)
-
-    # Serialize JSON after converting NumPy array to list
-    json_dict[f"{SCREEN_WIDTH}_{SCREEN_HEIGHT}"] = Qtable.tolist()
-    arr_json = json.dumps(json_dict, indent=4)
-
-    with open(q_table_path, 'w') as outfile:
-        outfile.write(arr_json)
+    q_learning.save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable)
     
     pygame.quit()
+
+
+if __name__ == "__main__":
+    main_menu()

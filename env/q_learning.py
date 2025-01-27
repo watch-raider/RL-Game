@@ -3,6 +3,8 @@ import random
 from enum import Enum
 import time
 import numpy as np
+import os
+import json
 
 learning_rate = 0.7  # Learning rate
 gamma = 0.95  # Discounting rate
@@ -30,6 +32,30 @@ def epsilon_greedy_policy(Qtable, state, epsilon, action_space):
         action = action_space.sample()
 
     return action
+
+def set_q_table(env, q_table_path, screen_width, screen_height):
+    isExist = os.path.exists(q_table_path)
+    json_dict = {}
+
+    if isExist:
+        with open(q_table_path, 'r') as outfile:
+            # Reading from json file
+            json_dict = json.load(outfile)
+            key_name = f"{screen_width}x{screen_height}"
+            if key_name in json_dict:
+                print(key_name, type(json_dict))
+                q_table_list = json_dict[key_name]
+                return np.array(q_table_list), json_dict
+
+    return initialize_q_table(env.observation_space, env.action_space), json_dict
+
+def save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable):
+    # Serialize JSON after converting NumPy array to list
+    json_dict[f"{screen_width}x{screen_height}"] = Qtable.tolist()
+    arr_json = json.dumps(json_dict, indent=4)
+
+    with open(q_table_path, 'w') as outfile:
+        outfile.write(arr_json)
     
 def train(env, n_training_episodes, min_epsilon, max_epsilon, decay_rate, Qtable):
     action = 1
