@@ -102,8 +102,12 @@ def start_game():
     env.reset()
     
     Qtable, json_dict = q_learning.set_q_table(env, q_table_path, screen_width, screen_height)
-    Qtable = q_learning.train(env, n_training_episodes, min_epsilon, max_epsilon, decay_rate, Qtable)
-    q_learning.save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable)
+    if mode == "train":
+        Qtable, episode = q_learning.train(env, min_epsilon, max_epsilon, decay_rate, Qtable)
+        q_learning.save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable, episode)
+    elif mode == "eval":
+        mean_reward, std_reward, episodes = q_learning.evaluate_agent(env, Qtable)
+        q_learning.save_eval(json_dict, q_table_path, screen_width, screen_height, mean_reward, std_reward, episodes)
     
     pygame.quit()
 

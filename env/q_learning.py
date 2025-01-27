@@ -44,64 +44,134 @@ def set_q_table(env, q_table_path, screen_width, screen_height):
             key_name = f"{screen_width}x{screen_height}"
             if key_name in json_dict:
                 print(key_name, type(json_dict))
-                q_table_list = json_dict[key_name]
+                q_table_list = json_dict[key_name]["q_table"]
                 return np.array(q_table_list), json_dict
+    else:
+        json_dict[f"{screen_width}x{screen_height}"] = {}
+        json_dict[f"{screen_width}x{screen_height}"]["episodes"] = 0
+
 
     return initialize_q_table(env.observation_space, env.action_space), json_dict
 
-def save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable):
+def save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable, episode):
     # Serialize JSON after converting NumPy array to list
-    json_dict[f"{screen_width}x{screen_height}"] = Qtable.tolist()
+    json_dict[f"{screen_width}x{screen_height}"]["q_table"] = Qtable.tolist()
+    json_dict[f"{screen_width}x{screen_height}"]["episodes"] += episode
+    arr_json = json.dumps(json_dict, indent=4)
+
+    with open(q_table_path, 'w') as outfile:
+        outfile.write(arr_json)
+
+def save_eval(json_dict, q_table_path, screen_width, screen_height, mean_reward, std_reward, eval_episodes):
+    # Serialize JSON after converting NumPy array to list
+    json_dict[f"{screen_width}x{screen_height}"]["mean_reward"] = mean_reward
+    json_dict[f"{screen_width}x{screen_height}"]["mean_std"] = std_reward
+    json_dict[f"{screen_width}x{screen_height}"]["eval_episodes"] = eval_episodes
     arr_json = json.dumps(json_dict, indent=4)
 
     with open(q_table_path, 'w') as outfile:
         outfile.write(arr_json)
     
-def train(env, n_training_episodes, min_epsilon, max_epsilon, decay_rate, Qtable):
+def train(env, min_epsilon, max_epsilon, decay_rate, Qtable):
     action = 1
+    episode = 1
 
-    for episode in range(n_training_episodes):
-        print(episode)
-        # Reduce epsilon (because we need less and less exploration)
-        epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
-        # Reset the environment
-        state = env.reset()
+    # Reduce epsilon (because we need less and less exploration)
+    epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
+    # Reset the environment
+    state = env.reset()
 
-        # repeat
-        while env.run:
-            current_time = time.time()
-            if current_time - env.last_action_time > env.action_delay:
-                action = epsilon_greedy_policy(Qtable, state, epsilon, env.action_space)
+    # repeat
+    while env.run:
+        current_time = time.time()
+        if current_time - env.last_action_time > env.action_delay:
+            action = epsilon_greedy_policy(Qtable, state, epsilon, env.action_space)
 
+            env.agent_step(action)
+            env.last_action_time = current_time
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                env.run = False
+
+            if event.type == pygame.KEYDOWN:
+                new_state, reward = env.human_step(event)
+
+                # Take action At and observe Rt+1 and St+1
+                # Take the action (a) and observe the outcome state(s') and reward (r)
+
+                # Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * max Q(s',a') - Q(s,a)]
+                Qtable[state][action] = Qtable[state][action] + learning_rate * (
+                    reward + gamma * np.max(Qtable[new_state]) - Qtable[state][action]
+                )
+
+                # Our next state is the new state
+                state = new_state
+
+                # Choose the action At using epsilon greedy policy
+                action = epsilon_greedy_policy(Qtable, new_state, epsilon, env.action_space)
                 env.agent_step(action)
-                env.last_action_time = current_time
+                env.last_action_time = env.current_time
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    env.run = False
+        env.render()
 
-                if event.type == pygame.KEYDOWN:
-                    new_state, reward = env.human_step(event)
+        if state == 0:
+            episode += 1
+            # Reduce epsilon (because we need less and less exploration)
+            epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
+            # Reset the environment
+            state = env.reset()
 
-                    # Take action At and observe Rt+1 and St+1
-                    # Take the action (a) and observe the outcome state(s') and reward (r)
+    return Qtable, episode
 
-                    # Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * max Q(s',a') - Q(s,a)]
-                    Qtable[state][action] = Qtable[state][action] + learning_rate * (
-                        reward + gamma * np.max(Qtable[new_state]) - Qtable[state][action]
-                    )
+def evaluate_agent(env, Qtable):
+    """
+    Evaluate the agent for episodes and returns average reward and std of reward.
+    :param env: The evaluation environment
+    :param Qtable: The Q-table
+    """    
+    episode_rewards = []
+    total_rewards_ep = 0
+    state = env.reset()
+    episode = 0
 
-                    # Our next state is the new state
-                    state = new_state
+    while env.run:
+        current_time = time.time()
+        if current_time - env.last_action_time > env.action_delay:
+            # Take the action (index) that have the maximum expected future reward given that state
+            action = greedy_policy(Qtable, state)
 
-                    # Choose the action At using epsilon greedy policy
-                    action = epsilon_greedy_policy(Qtable, new_state, epsilon, env.action_space)
-                    env.agent_step(action)
-                    env.last_action_time = env.current_time
+            env.agent_step(action)
+            env.last_action_time = current_time
 
-            if state == 0:
-                break
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                env.run = False
 
-            env.render()
+            if event.type == pygame.KEYDOWN:
+                new_state, reward = env.human_step(event)
+                
 
-    return Qtable
+                total_rewards_ep += reward
+
+                # Our next state is the new state
+                state = new_state
+
+                # Take the action (index) that have the maximum expected future reward given that state
+                action = greedy_policy(Qtable, new_state)
+                env.agent_step(action)
+                env.last_action_time = env.current_time
+
+        env.render()
+
+        if state == 0:
+            episode += 1
+            # Reset the environment
+            state = env.reset()
+            episode_rewards.append(total_rewards_ep)
+            total_rewards_ep = 0
+
+    mean_reward = np.mean(episode_rewards)
+    std_reward = np.std(episode_rewards)
+
+    return mean_reward, std_reward, episode

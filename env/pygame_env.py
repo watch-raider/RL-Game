@@ -14,7 +14,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255) 
 CYAN = (0, 100, 100) 
 BLACK = (0, 0, 0) 
-WHITE = (255, 255, 255) 
+WHITE = (255, 255, 255)
 
 class AgentAction(Enum):
     MOVE_LEFT = 1
