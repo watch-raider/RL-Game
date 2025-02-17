@@ -79,48 +79,33 @@ def train(env, min_epsilon, max_epsilon, decay_rate, Qtable):
     # Reduce epsilon (because we need less and less exploration)
     epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
     # Reset the environment
-    state = env.reset()
+    state, info = env.reset()
 
     # repeat
     while env.run:
-        current_time = time.time()
-        if current_time - env.last_action_time > env.action_delay:
-            action = epsilon_greedy_policy(Qtable, state, epsilon, env.action_space)
+        # Choose the action At using epsilon greedy policy
+        action = epsilon_greedy_policy(Qtable, state, epsilon, env.action_space)
 
-            env.agent_step(action)
-            env.last_action_time = current_time
+        observation, reward, terminated, truncated, info = env.step(action)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                env.run = False
+        # Take action At and observe Rt+1 and St+1
+        # Take the action (a) and observe the outcome state(s') and reward (r)
 
-            if event.type == pygame.KEYDOWN:
-                new_state, reward = env.human_step(event)
-
-                # Take action At and observe Rt+1 and St+1
-                # Take the action (a) and observe the outcome state(s') and reward (r)
-
-                # Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * max Q(s',a') - Q(s,a)]
-                Qtable[state][action] = Qtable[state][action] + learning_rate * (
-                    reward + gamma * np.max(Qtable[new_state]) - Qtable[state][action]
-                )
-
-                # Our next state is the new state
-                state = new_state
-
-                # Choose the action At using epsilon greedy policy
-                action = epsilon_greedy_policy(Qtable, new_state, epsilon, env.action_space)
-                env.agent_step(action)
-                env.last_action_time = env.current_time
-
-        env.render()
-
-        if state == 0:
+        # Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * max Q(s',a') - Q(s,a)]
+        Qtable[state][action] = Qtable[state][action] + learning_rate * (
+            reward + gamma * np.max(Qtable[observation]) - Qtable[state][action]
+            )
+                
+        if terminated:
             episode += 1
+            state = env.reset()
             # Reduce epsilon (because we need less and less exploration)
             epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
-            # Reset the environment
-            state = env.reset()
+
+        # Our next state is the new state
+        state = observation
+
+        env.render()
 
     return Qtable, episode
 
@@ -136,40 +121,22 @@ def evaluate_agent(env, Qtable):
     episode = 0
 
     while env.run:
-        current_time = time.time()
-        if current_time - env.last_action_time > env.action_delay:
-            # Take the action (index) that have the maximum expected future reward given that state
-            action = greedy_policy(Qtable, state)
+        action = greedy_policy(Qtable, state)
 
-            env.agent_step(action)
-            env.last_action_time = current_time
+        observation, reward, terminated, truncated, info = env.step(action)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                env.run = False
+        total_rewards_ep += reward
 
-            if event.type == pygame.KEYDOWN:
-                new_state, reward = env.human_step(event)
-                
-
-                total_rewards_ep += reward
-
-                # Our next state is the new state
-                state = new_state
-
-                # Take the action (index) that have the maximum expected future reward given that state
-                action = greedy_policy(Qtable, new_state)
-                env.agent_step(action)
-                env.last_action_time = env.current_time
-
-        env.render()
-
-        if state == 0:
+        if terminated:
             episode += 1
-            # Reset the environment
             state = env.reset()
             episode_rewards.append(total_rewards_ep)
             total_rewards_ep = 0
+
+        # Our next state is the new state
+        state = observation
+
+        env.render()
 
     mean_reward = np.mean(episode_rewards)
     std_reward = np.std(episode_rewards)

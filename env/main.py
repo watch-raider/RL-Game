@@ -8,8 +8,6 @@ import numpy as np
 
 from pygame_env import PygameEnvironment
 
-pygame.init()
-
 SCREEN_SIZE = [("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
 LEARNING_MODEL = [("Q Learning", "q_learning")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
@@ -29,7 +27,7 @@ learning_rate = 0.7  # Learning rate
 # Exploration parameters
 max_epsilon = 1.0  # Exploration probability at start
 min_epsilon = 0.05  # Minimum exploration probability
-decay_rate = 0.0005  # Exponential decay rate for exploration prob
+decay_rate = 0.05  # Exponential decay rate for exploration prob
 
 # game parameters
 screen_height = 500
@@ -98,19 +96,25 @@ def start_game():
     json_db_path = f"{cwd}/json_db"
     q_table_path = f"{json_db_path}/q_table.json"
 
-    env = PygameEnvironment(screen_width, screen_height)
+    multi=True
+    if model == "q_learning":
+        multi = False
+        
+    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height, is_multi=multi)
     env.reset()
     
-    Qtable, json_dict = q_learning.set_q_table(env, q_table_path, screen_width, screen_height)
-    if mode == "train":
-        Qtable, episode = q_learning.train(env, min_epsilon, max_epsilon, decay_rate, Qtable)
-        q_learning.save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable, episode)
-    elif mode == "eval":
-        mean_reward, std_reward, episodes = q_learning.evaluate_agent(env, Qtable)
-        q_learning.save_eval(json_dict, q_table_path, screen_width, screen_height, mean_reward, std_reward, episodes)
+    if model == "q_learning":
+        Qtable, json_dict = q_learning.set_q_table(env, q_table_path, screen_width, screen_height)
+        if mode == "train":
+            Qtable, episode = q_learning.train(env, min_epsilon, max_epsilon, decay_rate, Qtable)
+            q_learning.save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable, episode)
+        elif mode == "eval":
+            mean_reward, std_reward, episodes = q_learning.evaluate_agent(env, Qtable)
+            q_learning.save_eval(json_dict, q_table_path, screen_width, screen_height, mean_reward, std_reward, episodes)
     
     pygame.quit()
 
 
 if __name__ == "__main__":
+    pygame.init()
     main_menu()
