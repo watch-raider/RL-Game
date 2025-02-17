@@ -78,7 +78,7 @@ class PygameEnvironment(gym.Env):
 
     def reset(self,seed=None, options=None):
         positions_x = [x for x in range(0, self.screen_width, 50)]
-        positions_y = [x for x in range(0, self.screen_height, 50)]
+        positions_y = [y for y in range(0, self.screen_height, 50)]
 
         # Generate non-overlapping positions for human, agent, and goal
         while True:
@@ -122,9 +122,9 @@ class PygameEnvironment(gym.Env):
         elif action == AgentAction.LIGHT_RIGHT_TOGGLE.value:
             self.light_r = self.LIGHT_ON if self.light_r == self.LIGHT_OFF else self.LIGHT_OFF
         elif action == AgentAction.LIGHT_DOWN_TOGGLE.value:
-            self.light_b = self.LIGHT_ON if self.light_t == self.LIGHT_OFF else self.LIGHT_OFF
+            self.light_b = self.LIGHT_ON if self.light_b == self.LIGHT_OFF else self.LIGHT_OFF
         elif action == AgentAction.LIGHT_LEFT_TOGGLE.value:
-            self.light_l = self.LIGHT_ON if self.light_t == self.LIGHT_OFF else self.LIGHT_OFF
+            self.light_l = self.LIGHT_ON if self.light_l == self.LIGHT_OFF else self.LIGHT_OFF
 
         self.last_action_time = time.time()
         
