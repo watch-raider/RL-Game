@@ -30,12 +30,23 @@ class AgentAction(Enum):
     LIGHT_DOWN_ON = 11
     LIGHT_DOWN_OFF = 12
 
+class AgentAction_v2(Enum):
+    MOVE_LEFT = 1
+    MOVE_RIGHT = 2
+    MOVE_UP = 3
+    MOVE_DOWN = 4
+    LIGHT_LEFT_TOGGLE = 5
+    LIGHT_RIGHT_TOGGLE = 7
+    LIGHT_UP_TOGGLE = 9
+    LIGHT_DOWN_TOGGLE = 11
+
 class PygameEnvironment(gym.Env):
     metadata = {
         "name": "custom_environment_v0",
     }
     LIGHT_OFF = (180, 180, 180)
     LIGHT_ON = (255, 165, 0)
+    PLAYER_SIZE = 50
 
     def __init__(self, SCREEN_WIDTH, SCREEN_HEIGHT):
         self.goal = None
@@ -49,9 +60,10 @@ class PygameEnvironment(gym.Env):
         self.score = 0
         self.font = pygame.font.Font(None, 36)
         self.current_time = time.time()
-        self.screen_width = SCREEN_WIDTH
-        self.screen_height = SCREEN_HEIGHT
-
+        self.screen_width = SCREEN_WIDTH # The size of the PyGame window
+        self.screen_height = SCREEN_HEIGHT # The size of the PyGame window
+        self.size = len(range(25, self.screen_height, 50)) # The size of the square grid
+        
         self.human_colour = RED  # Red for human
         self.agent_colour = BLUE  # Blue for agent
         self.goal_colour = BLACK  # Green for goal
@@ -80,9 +92,9 @@ class PygameEnvironment(gym.Env):
             if human_pos != agent_pos and human_pos != goal_pos and agent_pos != goal_pos:
                 break
 
-        self.human = pygame.Rect(human_pos[0], human_pos[1], 50, 50)
-        self.agent = pygame.Rect(agent_pos[0], agent_pos[1], 50, 50)
-        self.goal = pygame.Rect(goal_pos[0], goal_pos[1], 50, 50)
+        self.human = pygame.Rect(human_pos[0], human_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
+        self.agent = pygame.Rect(agent_pos[0], agent_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
+        self.goal = pygame.Rect(goal_pos[0], goal_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
 
         self.reset_lights()
 
@@ -146,6 +158,27 @@ class PygameEnvironment(gym.Env):
     def render(self):
         """Renders the environment."""
         self.screen.fill(BLACK)
+
+        pix_square_size = (
+            self.screen_width / self.size
+        )
+
+        # Finally, add some gridlines
+        for x in range(self.size + 1):
+            pygame.draw.line(
+                self.screen,
+                (255, 255, 255),
+                (0, pix_square_size * x),
+                (self.screen_width, pix_square_size * x),
+                width=3,
+            )
+            pygame.draw.line(
+                self.screen,
+                (255, 255, 255),
+                (pix_square_size * x, 0),
+                (pix_square_size * x, self.screen_width),
+                width=3,
+            )
 
         pygame.draw.rect(self.screen, self.goal_colour, self.goal)
         pygame.draw.rect(self.screen, self.human_colour, self.human)
