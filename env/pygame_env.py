@@ -1,7 +1,7 @@
 import pygame
 
 import gymnasium as gym
-from gymnasium.spaces import Discrete, MultiDiscrete
+from gymnasium.spaces import Discrete, MultiDiscrete, Box
 
 import random
 from enum import Enum
@@ -31,52 +31,77 @@ class AgentAction(Enum):
     LIGHT_DOWN_TOGGLE = 8
 
 class PygameEnvironment(gym.Env):
-    metadata = {
-        "name": "custom_environment_v0",
-        "render_modes": ["human"]
-    }
+    metadata = {"render_modes": ["human"], "render_fps": 30}
     LIGHT_OFF = (180, 180, 180)
     LIGHT_ON = (255, 165, 0)
     PLAYER_SIZE = 50
 
-    def __init__(self, SCREEN_WIDTH=500, SCREEN_HEIGHT=500, is_multi=True, render_mode="human"):
+    def __init__(self, SCREEN_WIDTH=500, SCREEN_HEIGHT=500, render_mode="human"):
+        """Initialize the environment with given screen dimensions and mode.
+        
+        Args:
+            SCREEN_WIDTH (int): Width of game window
+            SCREEN_HEIGHT (int): Height of game window 
+            render_mode (str): Rendering mode
+        """
+        super().__init__()
         self.render_mode = render_mode
+        self.screen_width = SCREEN_WIDTH
+        self.screen_height = SCREEN_HEIGHT
 
+        # Initialize game objects
         self.goal = None
-        self.human = None
+        self.human = None 
         self.agent = None
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        
+        # Calculate grid dimensions
         self.n_cols = len(range(25, SCREEN_WIDTH, 50))
         self.n_rows = len(range(25, SCREEN_HEIGHT, 50))
+        self.size = self.n_rows
         self.max_manhattan_dist = self.n_rows + self.n_cols - 2
+
+        # Game state variables
         self.timestep = 0
         self.score = 0
-        self.font = pygame.font.Font(None, 36)
-        self.current_time = time.time()
-        self.screen_width = SCREEN_WIDTH # The size of the PyGame window
-        self.screen_height = SCREEN_HEIGHT # The size of the PyGame window
-        self.size = len(range(25, self.screen_height, 50)) # The size of the square grid
-        self.is_multi = is_multi
-        self.human_take_action = False
-
-        self.human_colour = RED  # Red for human
-        self.agent_colour = BLUE  # Blue for agent
-        self.goal_colour = BLACK  # Green for goal
-        self.light_radius = 5
-        self.reset_lights()
-
         self.run = True
+        self.human_take_action = False
+        
+        # Display elements
+        self.font = pygame.font.Font(None, 36)
+        self.human_colour = RED
+        self.agent_colour = BLUE
+        self.goal_colour = BLACK
+        self.light_radius = 5
+
+        # Timing controls
         self.clock = pygame.time.Clock()
+        self.current_time = time.time()
         self.last_action_time = time.time()
         self.action_delay = 2  # 2 seconds between actions
 
-        self.action_space = Discrete(len(AgentAction))
-        if not is_multi:
-            self.observation_space = Discrete(self.n_cols + self.n_rows - 2)
-        else:
-            self.observation_space = MultiDiscrete([100, 100, 100, 2, 2, 2, 2])
+        self.reset_lights()
 
-    def reset(self,seed=None, options=None):
+        # Set up action and observation spaces
+        self.action_space = Discrete(8)
+        self.observation_space = Box(
+            low=np.array([0, 0, 0, 0, 0, 0, 0]),  # Agent pos, Human pos, Goal pos, Light states
+            high=np.array([self.size**2, self.size**2, self.size**2, 1, 1, 1, 1]),
+            dtype=np.int64
+        )
+
+    def reset(self, seed=None, options=None):
+        """Reset the environment to initial state.
+        
+        Args:
+            seed: Optional seed for reproducibility
+            options: Optional configuration
+            
+        Returns:
+            tuple: (observation, info)
+        """
+        super().reset(seed=seed)  # Important for reproducibility
+        self.timestep = 0
         positions_x = [x for x in range(0, self.screen_width, 50)]
         positions_y = [y for y in range(0, self.screen_height, 50)]
 
@@ -94,7 +119,6 @@ class PygameEnvironment(gym.Env):
         self.goal = pygame.Rect(goal_pos[0], goal_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
 
         self.reset_lights()
-
         self.human_take_action = False
 
         observation = self._get_obs()
@@ -103,12 +127,20 @@ class PygameEnvironment(gym.Env):
         return observation, info
 
     def step(self, action):
-        # Execute actions
+        """Execute one environment step.
+        
+        Args:
+            action: Agent's action
+            
+        Returns:
+            tuple: (observation, reward, terminated, truncated, info)
+        """
         current_time = time.time()
         self.human_take_action = False
-        truncated = False  # we do not limit the number of steps here
+        truncated = False
         old_dist = self.calculate_manhattan_distance(self.human, self.goal)
 
+        # Handle movement actions
         if action == AgentAction.MOVE_LEFT.value and self.agent.centerx > 25:
             self.agent.move_ip(-50, 0)
         elif action == AgentAction.MOVE_RIGHT.value and self.agent.centerx < self.screen_width - 25:
@@ -117,6 +149,8 @@ class PygameEnvironment(gym.Env):
             self.agent.move_ip(0, -50)
         elif action == AgentAction.MOVE_DOWN.value and self.agent.centery < self.screen_height - 25:
             self.agent.move_ip(0, 50)
+            
+        # Handle light toggle actions
         elif action == AgentAction.LIGHT_UP_TOGGLE.value:
             self.light_t = self.LIGHT_ON if self.light_t == self.LIGHT_OFF else self.LIGHT_OFF
         elif action == AgentAction.LIGHT_RIGHT_TOGGLE.value:
@@ -128,6 +162,7 @@ class PygameEnvironment(gym.Env):
 
         self.last_action_time = time.time()
         
+        # Wait for human action
         while current_time - self.last_action_time < self.action_delay and self.human_take_action is False:
             current_time = time.time()
             self.human_step()
@@ -137,12 +172,15 @@ class PygameEnvironment(gym.Env):
         reward, terminated = self.calculate_reward(old_dist)
         self.timestep += 1
 
+        info['is_success'] = terminated  # Add this line to include episode end information
+
         return observation, reward, terminated, truncated, info
 
     def human_step(self):
+        """Handle human player input."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.run = False
+                pygame.quit()
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT and self.human.centerx > 25:
@@ -159,61 +197,68 @@ class PygameEnvironment(gym.Env):
                     self.human_take_action = True
 
     def render(self):
-        """Renders the environment."""
+        """Render the current game state."""
         self.screen.fill(BLACK)
 
-        pix_square_size = (
-            self.screen_width / self.size
-        )
-
-        # Finally, add some gridlines
+        # Draw grid
+        pix_square_size = self.screen_width / self.size
         for x in range(self.size + 1):
             pygame.draw.line(
                 self.screen,
-                (255, 255, 255),
+                WHITE,
                 (0, pix_square_size * x),
                 (self.screen_width, pix_square_size * x),
                 width=3,
             )
             pygame.draw.line(
                 self.screen,
-                (255, 255, 255),
+                WHITE,
                 (pix_square_size * x, 0),
                 (pix_square_size * x, self.screen_width),
                 width=3,
             )
 
+        # Draw game objects
         pygame.draw.rect(self.screen, self.goal_colour, self.goal)
         pygame.draw.rect(self.screen, self.human_colour, self.human)
         pygame.draw.rect(self.screen, self.agent_colour, self.agent)
 
+        # Draw lights
         light_t, light_r, light_b, light_l = self.set_light_xy()
-
         pygame.draw.circle(surface=self.screen, color=self.light_t, center=light_t, radius=self.light_radius)
         pygame.draw.circle(surface=self.screen, color=self.light_r, center=light_r, radius=self.light_radius)
         pygame.draw.circle(surface=self.screen, color=self.light_b, center=light_b, radius=self.light_radius)
         pygame.draw.circle(surface=self.screen, color=self.light_l, center=light_l, radius=self.light_radius)
 
-        # Draw the score to the screen
+        # Draw score
         score_text = self.font.render(f'Score: {self.score}', True, WHITE)
         self.screen.blit(score_text, (5, 5))
 
         pygame.display.update()
 
-    def calculate_reward(self, old_dist): 
+    def calculate_reward(self, old_dist):
+        """Calculate reward based on game state changes.
+        
+        Args:
+            old_dist: Previous manhattan distance between human and goal
+            
+        Returns:
+            tuple: (reward, terminated)
+        """
         new_dist = self.calculate_manhattan_distance(self.human, self.goal)
         reward = 0
         terminated = False
 
+        # Distance-based rewards
         if new_dist > old_dist:
             reward -= 1
         elif new_dist < old_dist:
             reward += 1
 
+        # Special state rewards
         if self.human.center == self.agent.center:
             reward -= 10
             self.score -= 10
-
         elif self.human.center == self.goal.center:
             reward += 10
             self.score += 10
@@ -222,47 +267,53 @@ class PygameEnvironment(gym.Env):
         return reward, terminated
 
     def _get_obs(self):
-        if not self.is_multi:
-            return self.calculate_manhattan_distance(self.human, self.goal)
-        else:
-            H = self.calculate_location(self.human)
-            G = self.calculate_location(self.goal)
-            A = self.calculate_location(self.agent)
-            TL =  1 if self.light_t == self.LIGHT_ON else 0
-            RL =  1 if self.light_r == self.LIGHT_ON else 0
-            BL =  1 if self.light_b == self.LIGHT_ON else 0
-            LL =  1 if self.light_l == self.LIGHT_ON else 0
-        return np.array([H, G, A, TL,  RL,  BL,  LL])
+        """Get current observation of environment state."""
+        
+        H = self.calculate_location(self.human)
+        G = self.calculate_location(self.goal)
+        A = self.calculate_location(self.agent)
+        TL = 1 if self.light_t == self.LIGHT_ON else 0
+        RL = 1 if self.light_r == self.LIGHT_ON else 0
+        BL = 1 if self.light_b == self.LIGHT_ON else 0
+        LL = 1 if self.light_l == self.LIGHT_ON else 0
+        
+        return np.array([H, G, A, TL, RL, BL, LL])
 
     def _get_info(self):
+        """Get additional information about environment state."""
         return {
             "distance": self.calculate_manhattan_distance(self.human, self.goal)
         }
 
     def calculate_location(self, target):
+        """Convert target position to grid location index."""
         current_row, current_col = self.get_current_row_col(target)
-        return current_row*self.n_cols+current_col
+        return current_row * self.n_cols + current_col
 
     def calculate_manhattan_distance(self, origin, target):
+        """Calculate Manhattan distance between two points."""
         origin_row, origin_col = self.get_current_row_col(origin)
         target_row, target_col = self.get_current_row_col(target)
         return abs(origin_row - target_row) + abs(origin_col - target_col)
 
     def get_current_row_col(self, target):
+        """Get grid row and column for target position."""
         rows = range(25, self.screen_height, 50)
         cols = range(25, self.screen_width, 50)
         return rows.index(target.centery), cols.index(target.centerx)
 
     def reset_lights(self):
+        """Reset all lights to off state."""
         self.light_t = self.LIGHT_OFF
         self.light_r = self.LIGHT_OFF
         self.light_b = self.LIGHT_OFF
         self.light_l = self.LIGHT_OFF
 
     def set_light_xy(self):
-        light_1 = (self.agent.centerx, self.agent.top+self.light_radius)
-        light_2 = (self.agent.right-self.light_radius, self.agent.centery)
-        light_3 = (self.agent.centerx, self.agent.bottom-self.light_radius)
-        light_4 = (self.agent.left+self.light_radius, self.agent.centery)
+        """Calculate light positions relative to agent."""
+        light_1 = (self.agent.centerx, self.agent.top + self.light_radius)
+        light_2 = (self.agent.right - self.light_radius, self.agent.centery)
+        light_3 = (self.agent.centerx, self.agent.bottom - self.light_radius)
+        light_4 = (self.agent.left + self.light_radius, self.agent.centery)
 
         return light_1, light_2, light_3, light_4

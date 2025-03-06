@@ -1,24 +1,27 @@
 import pygame
 import pygame_menu as pm
 
-import q_learning
-import json
 import os
 import numpy as np
 
+from stable_baselines3 import A2C, PPO
+from sb3_contrib import TRPO
+from stable_baselines3.common.evaluation import evaluate_policy
+
 from pygame_env import PygameEnvironment
+from human_callback import HumanCallback
 
 SCREEN_SIZE = [("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
-LEARNING_MODEL = [("Q Learning", "q_learning")]
+LEARNING_MODEL = [("PPO", "ppo"), ("A2C", "a2c"), ("TRPO", "trpo")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
 
 # Standard RGB colors 
-RED = (255, 0, 0) 
-GREEN = (0, 255, 0) 
-BLUE = (0, 0, 255) 
-CYAN = (0, 100, 100) 
-BLACK = (0, 0, 0) 
-WHITE = (255, 255, 255) 
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+CYAN = (0, 100, 100)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 
 # Training parameters
 n_training_episodes = 5  # Total training episodes
@@ -30,10 +33,10 @@ min_epsilon = 0.05  # Minimum exploration probability
 decay_rate = 0.05  # Exponential decay rate for exploration prob
 
 # game parameters
-screen_height = 500
-screen_width = 500
-model = "q_learning"
-mode = "train"
+screen_height = SCREEN_SIZE[0][1]
+screen_width = SCREEN_SIZE[0][1]
+model_name = LEARNING_MODEL[0][1]
+mode = MODE[0][1]
 
 def set_screen(value, selected_size):
     global screen_width, screen_height
@@ -41,35 +44,35 @@ def set_screen(value, selected_size):
     screen_height = selected_size
 
 def set_model(value, selected_model):
-    global model
-    model = selected_model
+    global model_name
+    model_name = selected_model
 
 def set_mode(value, selected_mode):
     global mode
     mode = selected_mode
 
 def main_menu():
-    screen = pygame.display.set_mode((SCREEN_SIZE[0][1],SCREEN_SIZE[0][1]))
+    screen = pygame.display.set_mode((screen_height,screen_width))
     #screen.fill(BLACK)
 
     # Creating the settings menu 
     settings = pm.Menu(title="Settings", 
-                       width=SCREEN_SIZE[0][1], 
-                       height=SCREEN_SIZE[0][1], 
+                       width=screen_width, 
+                       height=screen_height, 
                        theme=pm.themes.THEME_GREEN) 
     
     settings.add.dropselect(title="SCREEN SIZE", items=SCREEN_SIZE, onchange=set_screen,
                             dropselect_id="screen_size", default=0)
 
     settings.add.dropselect(title="LEARNING MODEL", items=LEARNING_MODEL, onchange=set_model,
-                            dropselect_id="learning_model", default=0) 
+                            dropselect_id="learning_model", default=1) 
     
     settings.add.dropselect(title="MODE", items=MODE, onchange=set_mode,
                             dropselect_id="mode", default=0) 
 
     mainMenu = pm.Menu(title="Main Menu",
-                       width=SCREEN_SIZE[0][1], 
-                       height=SCREEN_SIZE[0][1], 
+                       width=screen_width, 
+                       height=screen_height, 
                        theme=pm.themes.THEME_GREEN)
     
     mainMenu.add.button(title="PLAY", action=start_game, 
@@ -92,29 +95,51 @@ def main_menu():
     mainMenu.mainloop(screen)
 
 def start_game():
-    cwd = os.getcwd()
-    json_db_path = f"{cwd}/json_db"
-    q_table_path = f"{json_db_path}/q_table.json"
+    global screen_width, screen_height, model_name, mode
+    
+    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height)
+    model_path = f"models/{model_name}_model.zip"
 
-    multi=True
-    if model == "q_learning":
-        multi = False
+    if mode == "train":
+        # Check if the model file exists
+        if os.path.exists(model_path):
+            print(f"Loading and training existing {model_name.upper()} model...")
+            if model_name == "a2c":
+                model = A2C.load(model_path, env=env, device="cpu")
+            elif model_name == "ppo":
+                model = PPO.load(model_path, env=env, device="cpu")
+            elif model_name == "trpo":
+                model = TRPO.load(model_path, env=env, device="cpu")
+        else:
+            # Define and Train the agent
+            print(f"Training {model_name.upper()} model...")
+            if model_name == "a2c":
+                model = A2C("MlpPolicy", env, device="cpu")
+            elif model_name == "ppo":
+                model = PPO("MlpPolicy", env, device="cpu")
+            elif model_name == "trpo":
+                model = TRPO("MlpPolicy", env, device="cpu")
         
-    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height, is_multi=multi)
-    env.reset()
-    
-    if model == "q_learning":
-        Qtable, json_dict = q_learning.set_q_table(env, q_table_path, screen_width, screen_height)
-        if mode == "train":
-            Qtable, episode = q_learning.train(env, min_epsilon, max_epsilon, decay_rate, Qtable)
-            q_learning.save_q_table(json_dict, q_table_path, screen_width, screen_height, Qtable, episode)
-        elif mode == "eval":
-            mean_reward, std_reward, episodes = q_learning.evaluate_agent(env, Qtable)
-            q_learning.save_eval(json_dict, q_table_path, screen_width, screen_height, mean_reward, std_reward, episodes)
-    
+        human_callback = HumanCallback()
+        model.learn(total_timesteps=1000, callback=human_callback)
+        model.save(model_path)  # Save the model after training
+
+    elif mode == "eval":
+        print("Evaluating DQN...")
+        # dqn.evaluate(env)
+        raise NotImplementedError("DQN evaluation is not implemented yet.")
+        
     pygame.quit()
 
+def main():
+    # Initialize pygame first
+    pygame.init()
+    
+    # Then create and run the menu
+    main_menu()
+    
+    # Cleanup when done
+    pygame.quit()
 
 if __name__ == "__main__":
-    pygame.init()
-    main_menu()
+    main()
