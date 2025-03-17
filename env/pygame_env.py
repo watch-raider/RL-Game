@@ -52,8 +52,9 @@ class PygameEnvironment(gym.Env):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         
         # Calculate grid dimensions
-        self.n_cols = len(range(25, SCREEN_WIDTH, 50))
-        self.n_rows = len(range(25, SCREEN_HEIGHT, 50))
+        self.grid_size = 50
+        self.n_cols = SCREEN_WIDTH // self.grid_size
+        self.n_rows = SCREEN_HEIGHT // self.grid_size
         self.size = self.n_rows
         self.max_manhattan_dist = self.n_rows + self.n_cols - 2
 
@@ -97,7 +98,6 @@ class PygameEnvironment(gym.Env):
             tuple: (observation, info)
         """
         super().reset(seed=seed)  # Important for reproducibility
-        self.timestep = 0
         positions_x = [x for x in range(0, self.screen_width, 50)]
         positions_y = [y for y in range(0, self.screen_height, 50)]
 
