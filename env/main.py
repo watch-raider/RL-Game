@@ -114,15 +114,14 @@ def start_game():
             # Define and Train the agent
             print(f"Training {model_name.upper()} model...")
             if model_name == "a2c":
-                model = A2C("MlpPolicy", env, device="cpu")
+                model = A2C("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
             elif model_name == "ppo":
-                model = PPO("MlpPolicy", env, device="cpu")
+                model = PPO("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
             elif model_name == "trpo":
-                model = TRPO("MlpPolicy", env, device="cpu")
+                model = TRPO("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
         
-        human_callback = HumanCallback()
+        human_callback = HumanCallback(rl_algorithm=model_name)
         model.learn(total_timesteps=1000, callback=human_callback)
-        model.save(model_path)  # Save the model after training
 
     elif mode == "eval":
         print("Evaluating DQN...")

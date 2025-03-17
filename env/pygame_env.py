@@ -16,19 +16,15 @@ CYAN = (0, 100, 100)
 BLACK = (0, 0, 0) 
 WHITE = (255, 255, 255)
 
-class DiscreteOrMulti(Enum):
-    Discrete = 1
-    Multi = 2
-
 class AgentAction(Enum):
-    MOVE_LEFT = 1
-    MOVE_RIGHT = 2
-    MOVE_UP = 3
-    MOVE_DOWN = 4
-    LIGHT_LEFT_TOGGLE = 5
-    LIGHT_RIGHT_TOGGLE = 6
-    LIGHT_UP_TOGGLE = 7
-    LIGHT_DOWN_TOGGLE = 8
+    MOVE_LEFT = 0
+    MOVE_RIGHT = 1
+    MOVE_UP = 2
+    MOVE_DOWN = 3
+    LIGHT_LEFT_TOGGLE = 4
+    LIGHT_RIGHT_TOGGLE = 5
+    LIGHT_UP_TOGGLE = 6
+    LIGHT_DOWN_TOGGLE = 7
 
 class PygameEnvironment(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 30}
@@ -62,7 +58,7 @@ class PygameEnvironment(gym.Env):
         self.max_manhattan_dist = self.n_rows + self.n_cols - 2
 
         # Game state variables
-        self.timestep = 0
+        #self.timestep = 0
         self.score = 0
         self.run = True
         self.human_take_action = False
@@ -83,7 +79,7 @@ class PygameEnvironment(gym.Env):
         self.reset_lights()
 
         # Set up action and observation spaces
-        self.action_space = Discrete(8)
+        self.action_space = Discrete(len(AgentAction))
         self.observation_space = Box(
             low=np.array([0, 0, 0, 0, 0, 0, 0]),  # Agent pos, Human pos, Goal pos, Light states
             high=np.array([self.size**2, self.size**2, self.size**2, 1, 1, 1, 1]),
@@ -170,7 +166,6 @@ class PygameEnvironment(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
         reward, terminated = self.calculate_reward(old_dist)
-        self.timestep += 1
 
         info['is_success'] = terminated  # Add this line to include episode end information
 
