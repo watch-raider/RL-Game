@@ -7,12 +7,16 @@ import numpy as np
 from stable_baselines3 import A2C, PPO
 from sb3_contrib import TRPO
 from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 
 from pygame_env import PygameEnvironment
-from human_callback import HumanCallback
+from callbacks.human_callback import HumanCallback
+#from callbacks.tensorboard_callback import TensorboardCallback
+from callbacks.training_callback import TrainingLogger
 
 SCREEN_SIZE = [("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
-LEARNING_MODEL = [("PPO", "ppo"), ("A2C", "a2c"), ("TRPO", "trpo")]
+LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo")]#("A2C", "a2c")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
 
 # Standard RGB colors 
@@ -97,36 +101,56 @@ def main_menu():
 def start_game():
     global screen_width, screen_height, model_name, mode
     
-    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height)
+    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height, step_limit=50)
     model_path = f"models/{model_name}_model.zip"
 
     if mode == "train":
+        # Setup callbacks
+        #tb_callback = TensorboardCallback()
+        training_callback = TrainingLogger(rl_algorithm=model_name)
+        human_callback = HumanCallback(rl_algorithm=model_name)
+
+        # Combined callbacks
+        callbacks = CallbackList([human_callback, training_callback])#tb_callback])
+
         # Check if the model file exists
         if os.path.exists(model_path):
             print(f"Loading and training existing {model_name.upper()} model...")
-            if model_name == "a2c":
-                model = A2C.load(model_path, env=env, device="cpu")
-            elif model_name == "ppo":
+            #if model_name == "a2c":
+                #model = A2C.load(model_path, env=env, device="cpu")
+            if model_name == "ppo":
                 model = PPO.load(model_path, env=env, device="cpu")
             elif model_name == "trpo":
                 model = TRPO.load(model_path, env=env, device="cpu")
         else:
             # Define and Train the agent
             print(f"Training {model_name.upper()} model...")
-            if model_name == "a2c":
-                model = A2C("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
-            elif model_name == "ppo":
-                model = PPO("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
+            #if model_name == "a2c":
+                #model = A2C("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
+            if model_name == "ppo":
+                model = PPO("MlpPolicy", env, device="cpu")
             elif model_name == "trpo":
-                model = TRPO("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
+                model = TRPO("MlpPolicy", env, device="cpu")
         
-        human_callback = HumanCallback(rl_algorithm=model_name)
-        model.learn(total_timesteps=1000, callback=human_callback)
+        model.learn(total_timesteps=1000, callback=callbacks)
 
     elif mode == "eval":
-        print("Evaluating DQN...")
-        # dqn.evaluate(env)
-        raise NotImplementedError("DQN evaluation is not implemented yet.")
+        print(f"Evaluating {model_name.upper()} model...")
+        
+        # Load the trained model
+        if os.path.exists(model_path):
+            #if model_name == "a2c":
+            #    model = A2C.load(model_path)
+            if model_name == "ppo":
+                model = PPO.load(model_path)
+            elif model_name == "trpo":
+                model = TRPO.load(model_path)
+                
+            # Run evaluation
+            mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, render=True)
+            print(f"Mean reward: {mean_reward}, Std reward: {std_reward}")
+        else:
+            print(f"No trained model found at {model_path}. Please train the model first.")
         
     pygame.quit()
 

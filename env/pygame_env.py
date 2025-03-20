@@ -32,7 +32,7 @@ class PygameEnvironment(gym.Env):
     LIGHT_ON = (255, 165, 0)
     PLAYER_SIZE = 50
 
-    def __init__(self, SCREEN_WIDTH=500, SCREEN_HEIGHT=500, render_mode="human"):
+    def __init__(self, SCREEN_WIDTH=500, SCREEN_HEIGHT=500, render_mode="human", step_limit=50):
         """Initialize the environment with given screen dimensions and mode.
         
         Args:
@@ -63,6 +63,7 @@ class PygameEnvironment(gym.Env):
         self.score = 0
         self.run = True
         self.human_take_action = False
+        self.step_limit = step_limit
         
         # Display elements
         self.font = pygame.font.Font(None, 36)
@@ -75,7 +76,7 @@ class PygameEnvironment(gym.Env):
         self.clock = pygame.time.Clock()
         self.current_time = time.time()
         self.last_action_time = time.time()
-        self.action_delay = 2  # 2 seconds between actions
+        self.action_delay = 1.5  # 2 seconds between actions
 
         self.reset_lights()
 
@@ -114,11 +115,13 @@ class PygameEnvironment(gym.Env):
         self.agent = pygame.Rect(agent_pos[0], agent_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
         self.goal = pygame.Rect(goal_pos[0], goal_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
 
+        self.agent_step = 0
+
         self.reset_lights()
         self.human_take_action = False
 
         observation = self._get_obs()
-        info = self._get_info()
+        info = self._get_info(is_success=False, is_truncated=False)
 
         return observation, info
 
@@ -156,6 +159,7 @@ class PygameEnvironment(gym.Env):
         elif action == AgentAction.LIGHT_LEFT_TOGGLE.value:
             self.light_l = self.LIGHT_ON if self.light_l == self.LIGHT_OFF else self.LIGHT_OFF
 
+        self.agent_step += 1
         self.last_action_time = time.time()
         
         # Wait for human action
@@ -163,11 +167,13 @@ class PygameEnvironment(gym.Env):
             current_time = time.time()
             self.human_step()
 
-        observation = self._get_obs()
-        info = self._get_info()
+        if self.agent_step >= self.step_limit:
+            truncated = True
+
         reward, terminated = self.calculate_reward(old_dist)
 
-        info['is_success'] = terminated  # Add this line to include episode end information
+        observation = self._get_obs()
+        info = self._get_info(is_success=terminated, is_truncated=truncated)
 
         return observation, reward, terminated, truncated, info
 
@@ -214,7 +220,7 @@ class PygameEnvironment(gym.Env):
             )
 
         # Draw game objects
-        pygame.draw.rect(self.screen, self.goal_colour, self.goal)
+        #pygame.draw.rect(self.screen, self.goal_colour, self.goal)
         pygame.draw.rect(self.screen, self.human_colour, self.human)
         pygame.draw.rect(self.screen, self.agent_colour, self.agent)
 
@@ -226,8 +232,13 @@ class PygameEnvironment(gym.Env):
         pygame.draw.circle(surface=self.screen, color=self.light_l, center=light_l, radius=self.light_radius)
 
         # Draw score
-        score_text = self.font.render(f'Score: {self.score}', True, WHITE)
+        score_text = self.font.render(f'Score: {self.score}', True, CYAN)
         self.screen.blit(score_text, (5, 5))
+
+        # Draw remaining time
+        remaining_time = self.step_limit - self.agent_step
+        move_text = self.font.render(f'Agent moves left: {int(remaining_time)}', True, CYAN)
+        self.screen.blit(move_text, (5, 45))  # Position it below the score
 
         pygame.display.update()
 
@@ -244,11 +255,19 @@ class PygameEnvironment(gym.Env):
         reward = 0
         terminated = False
 
+        # Add time-based penalty to encourage faster completion
+        time_penalty = -0.05  # Small penalty each step to encourage efficiency
+        reward += time_penalty
+
         # Distance-based rewards
         if new_dist > old_dist:
-            reward -= 1
+            reward -= 0.2
         elif new_dist < old_dist:
-            reward += 1
+            reward += 0.5
+
+        # Light-based rewards
+        light_reward = self.calculate_light_reward()
+        reward += light_reward
 
         # Special state rewards
         if self.human.center == self.agent.center:
@@ -260,6 +279,48 @@ class PygameEnvironment(gym.Env):
             terminated = True
 
         return reward, terminated
+    
+    def calculate_light_reward(self):
+        """Calculate reward based on light signals guiding human toward goal."""
+        light_reward = 0
+        
+        # Get the relative position of the goal compared to the agent
+        agent_row, agent_col = self.get_current_row_col(self.agent)
+        goal_row, goal_col = self.get_current_row_col(self.goal)
+        
+        # Calculate directional differences
+        row_diff = goal_row - agent_row  # Positive if goal is below agent
+        col_diff = goal_col - agent_col  # Positive if goal is to the right of agent
+        
+        # Reward for correct light signals
+        if row_diff > 0 and self.light_b == self.LIGHT_ON:  # Goal is below
+            light_reward += 0.2
+        if row_diff < 0 and self.light_t == self.LIGHT_ON:  # Goal is above
+            light_reward += 0.2
+        if col_diff > 0 and self.light_r == self.LIGHT_ON:  # Goal is to the right
+            light_reward += 0.2
+        if col_diff < 0 and self.light_l == self.LIGHT_ON:  # Goal is to the left
+            light_reward += 0.2
+        
+        # Penalize incorrect light signals
+        if row_diff <= 0 and self.light_b == self.LIGHT_ON:  # Goal is not below
+            light_reward -= 0.1
+        if row_diff >= 0 and self.light_t == self.LIGHT_ON:  # Goal is not above
+            light_reward -= 0.1
+        if col_diff <= 0 and self.light_r == self.LIGHT_ON:  # Goal is not to the right
+            light_reward -= 0.1
+        if col_diff >= 0 and self.light_l == self.LIGHT_ON:  # Goal is not to the left
+            light_reward -= 0.1
+        
+        # Reward for turning on the correct light when human is nearby
+        human_row, human_col = self.get_current_row_col(self.human)
+        human_agent_dist = abs(human_row - agent_row) + abs(human_col - agent_col)
+        
+        if human_agent_dist <= 3:  # Human is nearby
+            # Increase reward for correct light signals when human is nearby
+            light_reward *= 2
+        
+        return light_reward
 
     def _get_obs(self):
         """Get current observation of environment state."""
@@ -274,10 +335,12 @@ class PygameEnvironment(gym.Env):
         
         return np.array([H, G, A, TL, RL, BL, LL])
 
-    def _get_info(self):
+    def _get_info(self, is_success, is_truncated):
         """Get additional information about environment state."""
         return {
-            "distance": self.calculate_manhattan_distance(self.human, self.goal)
+            "distance": self.calculate_manhattan_distance(self.human, self.goal),
+            "is_success": is_success,
+            "is_truncated": is_truncated
         }
 
     def calculate_location(self, target):

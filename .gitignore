@@ -1,4 +1,5 @@
 .DS_Store
 env/__pycache__/*
+env/callbacks/__pycache__/*
 env/logs/*
 env/models/*
