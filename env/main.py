@@ -101,7 +101,7 @@ def main_menu():
 def start_game():
     global screen_width, screen_height, model_name, mode
     
-    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height, step_limit=50)
+    env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height, step_limit=100)
     model_path = f"models/{model_name}_model.zip"
 
     if mode == "train":

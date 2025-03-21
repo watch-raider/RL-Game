@@ -43,13 +43,17 @@ class PygameEnvironment(gym.Env):
         super().__init__()
         self.render_mode = render_mode
         self.screen_width = SCREEN_WIDTH
-        self.screen_height = SCREEN_HEIGHT
-
+        
+        # Add footer height
+        self.footer_height = 60
+        self.game_height = SCREEN_HEIGHT
+        self.screen_height = SCREEN_HEIGHT + self.footer_height
+        
         # Initialize game objects
         self.goal = None
         self.human = None 
         self.agent = None
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, self.screen_height))
         
         # Calculate grid dimensions
         self.grid_size = 50
@@ -83,8 +87,8 @@ class PygameEnvironment(gym.Env):
         # Set up action and observation spaces
         self.action_space = Discrete(len(AgentAction))
         self.observation_space = Box(
-            low=np.array([0, 0, 0, 0, 0, 0, 0]),  # Agent pos, Human pos, Goal pos, Light states
-            high=np.array([self.size**2, self.size**2, self.size**2, 1, 1, 1, 1]),
+            low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # Agent x,y, Human x,y, Goal x,y, Light states
+            high=np.array([self.n_cols-1, self.n_rows-1, self.n_cols-1, self.n_rows-1, self.n_cols-1, self.n_rows-1, 1, 1, 1, 1]),
             dtype=np.int64
         )
 
@@ -100,7 +104,7 @@ class PygameEnvironment(gym.Env):
         """
         super().reset(seed=seed)  # Important for reproducibility
         positions_x = [x for x in range(0, self.screen_width, 50)]
-        positions_y = [y for y in range(0, self.screen_height, 50)]
+        positions_y = [y for y in range(0, self.game_height, 50)]
 
         # Generate non-overlapping positions for human, agent, and goal
         while True:
@@ -146,7 +150,7 @@ class PygameEnvironment(gym.Env):
             self.agent.move_ip(50, 0)
         elif action == AgentAction.MOVE_UP.value and self.agent.centery > 25:
             self.agent.move_ip(0, -50)
-        elif action == AgentAction.MOVE_DOWN.value and self.agent.centery < self.screen_height - 25:
+        elif action == AgentAction.MOVE_DOWN.value and self.agent.centery < self.game_height - 25:
             self.agent.move_ip(0, 50)
             
         # Handle light toggle actions
@@ -193,7 +197,7 @@ class PygameEnvironment(gym.Env):
                 elif event.key == pygame.K_UP and self.human.centery > 25:
                     self.human.move_ip(0, -50)
                     self.human_take_action = True
-                elif event.key == pygame.K_DOWN and self.human.centery < self.screen_height - 25:
+                elif event.key == pygame.K_DOWN and self.human.centery < self.game_height - 25:
                     self.human.move_ip(0, 50)
                     self.human_take_action = True
 
@@ -215,7 +219,7 @@ class PygameEnvironment(gym.Env):
                 self.screen,
                 WHITE,
                 (pix_square_size * x, 0),
-                (pix_square_size * x, self.screen_width),
+                (pix_square_size * x, self.game_height),
                 width=3,
             )
 
@@ -231,14 +235,27 @@ class PygameEnvironment(gym.Env):
         pygame.draw.circle(surface=self.screen, color=self.light_b, center=light_b, radius=self.light_radius)
         pygame.draw.circle(surface=self.screen, color=self.light_l, center=light_l, radius=self.light_radius)
 
+        # Draw footer
+        footer_rect = pygame.Rect(0, self.game_height, self.screen_width, self.footer_height)
+        pygame.draw.rect(self.screen, (50, 50, 50), footer_rect)  # Dark gray background
+        
+        # Draw footer border
+        pygame.draw.line(
+            self.screen,
+            WHITE,
+            (0, self.game_height),
+            (self.screen_width, self.game_height),
+            width=3,
+        )
+        
         # Draw score
-        score_text = self.font.render(f'Score: {self.score}', True, CYAN)
-        self.screen.blit(score_text, (5, 5))
+        score_text = self.font.render(f'Score: {self.score}', True, WHITE)
+        self.screen.blit(score_text, (self.screen_width - 150, self.game_height + 15))
 
-        # Draw remaining time
+        # Draw remaining moves
         remaining_time = self.step_limit - self.agent_step
-        move_text = self.font.render(f'Agent moves left: {int(remaining_time)}', True, CYAN)
-        self.screen.blit(move_text, (5, 45))  # Position it below the score
+        move_text = self.font.render(f'Agent battery: {int(remaining_time)}', True, WHITE)
+        self.screen.blit(move_text, (10, self.game_height + 15))
 
         pygame.display.update()
 
@@ -251,7 +268,6 @@ class PygameEnvironment(gym.Env):
         Returns:
             tuple: (reward, terminated)
         """
-        new_dist = self.calculate_manhattan_distance(self.human, self.goal)
         reward = 0
         terminated = False
 
@@ -259,11 +275,27 @@ class PygameEnvironment(gym.Env):
         time_penalty = -0.05  # Small penalty each step to encourage efficiency
         reward += time_penalty
 
-        # Distance-based rewards
-        if new_dist > old_dist:
-            reward -= 0.2
-        elif new_dist < old_dist:
-            reward += 0.5
+        # Add rewards for guiding the human
+        human_old_dist = self.calculate_manhattan_distance(self.human, self.goal)
+        
+        # Store the previous human position for the next step
+        if not hasattr(self, 'previous_human_pos'):
+            self.previous_human_pos = (self.human.centerx, self.human.centery)
+        
+        # Check if human moved this step
+        current_human_pos = (self.human.centerx, self.human.centery)
+        if current_human_pos != self.previous_human_pos:
+            # Human moved, check if they moved in the right direction
+            human_new_dist = self.calculate_manhattan_distance(self.human, self.goal)
+            if human_new_dist < human_old_dist:
+                # Human moved closer to goal
+                reward += 0.5  # Significant reward for successfully guiding the human
+            else:
+                # Human moved away from goal
+                reward -= 0.2
+                
+        # Update previous human position
+        self.previous_human_pos = current_human_pos
 
         # Light-based rewards
         light_reward = self.calculate_light_reward()
@@ -271,8 +303,8 @@ class PygameEnvironment(gym.Env):
 
         # Special state rewards
         if self.human.center == self.agent.center:
-            reward -= 10
-            self.score -= 10
+            reward -= 5
+            self.score -= 5
         elif self.human.center == self.goal.center:
             reward += 10
             self.score += 10
@@ -325,15 +357,16 @@ class PygameEnvironment(gym.Env):
     def _get_obs(self):
         """Get current observation of environment state."""
         
-        H = self.calculate_location(self.human)
-        G = self.calculate_location(self.goal)
-        A = self.calculate_location(self.agent)
+        human_row, human_col = self.get_current_row_col(self.human)
+        goal_row, goal_col = self.get_current_row_col(self.goal)
+        agent_row, agent_col = self.get_current_row_col(self.agent)
+        
         TL = 1 if self.light_t == self.LIGHT_ON else 0
         RL = 1 if self.light_r == self.LIGHT_ON else 0
         BL = 1 if self.light_b == self.LIGHT_ON else 0
         LL = 1 if self.light_l == self.LIGHT_ON else 0
         
-        return np.array([H, G, A, TL, RL, BL, LL])
+        return np.array([agent_col, agent_row, human_col, human_row, goal_col, goal_row, TL, RL, BL, LL])
 
     def _get_info(self, is_success, is_truncated):
         """Get additional information about environment state."""
@@ -343,11 +376,6 @@ class PygameEnvironment(gym.Env):
             "is_truncated": is_truncated
         }
 
-    def calculate_location(self, target):
-        """Convert target position to grid location index."""
-        current_row, current_col = self.get_current_row_col(target)
-        return current_row * self.n_cols + current_col
-
     def calculate_manhattan_distance(self, origin, target):
         """Calculate Manhattan distance between two points."""
         origin_row, origin_col = self.get_current_row_col(origin)
@@ -356,7 +384,7 @@ class PygameEnvironment(gym.Env):
 
     def get_current_row_col(self, target):
         """Get grid row and column for target position."""
-        rows = range(25, self.screen_height, 50)
+        rows = range(25, self.game_height, 50)
         cols = range(25, self.screen_width, 50)
         return rows.index(target.centery), cols.index(target.centerx)
 
