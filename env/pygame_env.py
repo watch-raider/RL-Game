@@ -69,8 +69,16 @@ class PygameEnvironment(gym.Env):
         self.human_take_action = False
         self.step_limit = step_limit
         
+        # Effect variables
+        self.success_effect_timer = 0
+        self.failure_effect_timer = 0
+        self.effect_duration = 1.5 
+        self.success_colors = [(0, 255, 0), (255, 255, 0)]  # Green and yellow
+        self.failure_colors = [(255, 0, 0), (150, 0, 0)]    # Red and dark red
+        
         # Display elements
         self.font = pygame.font.Font(None, 36)
+        self.big_font = pygame.font.Font(None, 72)
         self.human_colour = RED
         self.agent_colour = BLUE
         self.goal_colour = BLACK
@@ -172,12 +180,16 @@ class PygameEnvironment(gym.Env):
             self.human_step()
 
         if self.agent_step >= self.step_limit:
+            self.failure_effect_timer = self.effect_duration
             truncated = True
 
         reward, terminated = self.calculate_reward(old_dist)
 
         observation = self._get_obs()
         info = self._get_info(is_success=terminated, is_truncated=truncated)
+
+        if terminated: 
+            self.success_effect_timer = self.effect_duration
 
         return observation, reward, terminated, truncated, info
 
@@ -256,6 +268,36 @@ class PygameEnvironment(gym.Env):
         remaining_time = self.step_limit - self.agent_step
         move_text = self.font.render(f'Agent battery: {int(remaining_time)}', True, WHITE)
         self.screen.blit(move_text, (10, self.game_height + 15))
+        
+        # Draw success effect
+        if self.success_effect_timer > 0:
+            # Create flashing effect
+            color_idx = 1 if self.success_effect_timer % 6 < 3 else 0
+            overlay = pygame.Surface((self.screen_width, self.game_height), pygame.SRCALPHA)
+            overlay.fill((*self.success_colors[color_idx], 100))  # Semi-transparent
+            self.screen.blit(overlay, (0, 0))
+            
+            # Display success message
+            success_text = self.big_font.render('SUCCESS!', True, WHITE)
+            text_rect = success_text.get_rect(center=(self.screen_width//2, self.game_height//2))
+            self.screen.blit(success_text, text_rect)
+            
+            self.success_effect_timer -= 1
+        
+        # Draw failure effect
+        if self.failure_effect_timer > 0:
+            # Create flashing effect
+            color_idx = 1 if self.failure_effect_timer % 6 < 3 else 0
+            overlay = pygame.Surface((self.screen_width, self.game_height), pygame.SRCALPHA)
+            overlay.fill((*self.failure_colors[color_idx], 100))  # Semi-transparent
+            self.screen.blit(overlay, (0, 0))
+            
+            # Display failure message
+            failure_text = self.big_font.render('BATTERY DEAD!', True, WHITE)
+            text_rect = failure_text.get_rect(center=(self.screen_width//2, self.game_height//2))
+            self.screen.blit(failure_text, text_rect)
+            
+            self.failure_effect_timer -= 1
 
         pygame.display.update()
 
