@@ -16,7 +16,7 @@ from callbacks.human_callback import HumanCallback
 from callbacks.training_callback import TrainingLogger
 
 SCREEN_SIZE = [("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
-LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo")]#("A2C", "a2c")]
+LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
 
 # Standard RGB colors 
@@ -116,8 +116,8 @@ def start_game():
         # Check if the model file exists
         if os.path.exists(model_path):
             print(f"Loading and training existing {model_name.upper()} model...")
-            #if model_name == "a2c":
-                #model = A2C.load(model_path, env=env, device="cpu")
+            if model_name == "a2c":
+                model = A2C.load(model_path, env=env, device="cpu")
             if model_name == "ppo":
                 model = PPO.load(model_path, env=env, device="cpu")
             elif model_name == "trpo":
@@ -125,8 +125,8 @@ def start_game():
         else:
             # Define and Train the agent
             print(f"Training {model_name.upper()} model...")
-            #if model_name == "a2c":
-                #model = A2C("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
+            if model_name == "a2c":
+                model = A2C("MlpPolicy", env, device="cpu", tensorboard_log=f"./logs/{model_name}_pygame_tensorboard/")
             if model_name == "ppo":
                 model = PPO("MlpPolicy", env, device="cpu")
             elif model_name == "trpo":
@@ -139,8 +139,8 @@ def start_game():
         
         # Load the trained model
         if os.path.exists(model_path):
-            #if model_name == "a2c":
-            #    model = A2C.load(model_path)
+            if model_name == "a2c":
+                model = A2C.load(model_path)
             if model_name == "ppo":
                 model = PPO.load(model_path)
             elif model_name == "trpo":

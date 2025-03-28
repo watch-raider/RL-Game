@@ -149,7 +149,8 @@ class PygameEnvironment(gym.Env):
         current_time = time.time()
         self.human_take_action = False
         truncated = False
-        old_dist = self.calculate_manhattan_distance(self.human, self.goal)
+        human_old_dist = self.calculate_manhattan_distance(self.human, self.goal)
+        agent_old_row, agent_old_col = self.get_current_row_col(self.agent)
 
         # Handle movement actions
         if action == AgentAction.MOVE_LEFT.value and self.agent.centerx > 25:
@@ -183,7 +184,7 @@ class PygameEnvironment(gym.Env):
             self.failure_effect_timer = self.effect_duration
             truncated = True
 
-        reward, terminated = self.calculate_reward(old_dist)
+        reward, terminated = self.calculate_reward(human_old_dist, action, agent_old_row, agent_old_col)
 
         observation = self._get_obs()
         info = self._get_info(is_success=terminated, is_truncated=truncated)
@@ -301,7 +302,7 @@ class PygameEnvironment(gym.Env):
 
         pygame.display.update()
 
-    def calculate_reward(self, old_dist):
+    def calculate_reward(self, human_old_dist, agent_action, agent_old_row, agent_old_col):
         """Calculate reward based on game state changes.
         
         Args:
@@ -316,32 +317,24 @@ class PygameEnvironment(gym.Env):
         # Add time-based penalty to encourage faster completion
         time_penalty = -0.05  # Small penalty each step to encourage efficiency
         reward += time_penalty
-
-        # Add rewards for guiding the human
-        human_old_dist = self.calculate_manhattan_distance(self.human, self.goal)
         
-        # Store the previous human position for the next step
-        if not hasattr(self, 'previous_human_pos'):
-            self.previous_human_pos = (self.human.centerx, self.human.centery)
-        
-        # Check if human moved this step
-        current_human_pos = (self.human.centerx, self.human.centery)
-        if current_human_pos != self.previous_human_pos:
-            # Human moved, check if they moved in the right direction
-            human_new_dist = self.calculate_manhattan_distance(self.human, self.goal)
-            if human_new_dist < human_old_dist:
-                # Human moved closer to goal
-                reward += 0.5  # Significant reward for successfully guiding the human
-            else:
-                # Human moved away from goal
-                reward -= 0.2
-                
-        # Update previous human position
-        self.previous_human_pos = current_human_pos
+        human_new_dist = self.calculate_manhattan_distance(self.human, self.goal)
+        if human_new_dist < human_old_dist:
+            # Human moved closer to goal
+            reward += 0.5  # Significant reward for successfully guiding the human
+        elif human_new_dist > human_old_dist:
+            # Human moved away from goal
+            reward -= 0.2
 
         # Light-based rewards
         light_reward = self.calculate_light_reward()
         reward += light_reward
+
+         # Penalise trying to move outside of the grid
+        agent_current_row, agent_current_col = self.get_current_row_col(self.agent)
+        if agent_current_row == agent_old_row and agent_current_col == agent_old_col:
+            if agent_action == AgentAction.MOVE_UP.value or agent_action == AgentAction.MOVE_RIGHT.value or agent_action == AgentAction.MOVE_DOWN.value or agent_action == AgentAction.MOVE_LEFT.value:
+                reward -= 0.1
 
         # Special state rewards
         if self.human.center == self.agent.center:
@@ -375,6 +368,15 @@ class PygameEnvironment(gym.Env):
             light_reward += 0.2
         if col_diff < 0 and self.light_l == self.LIGHT_ON:  # Goal is to the left
             light_reward += 0.2
+
+        # Reward for turning on the correct light when human and goal is nearby
+        human_row, human_col = self.get_current_row_col(self.human)
+        human_agent_dist = abs(human_row - agent_row) + abs(human_col - agent_col)
+        goal_agent_dist = abs(goal_row - agent_row) + abs(goal_col - agent_col)
+        
+        if human_agent_dist <= 3 and goal_agent_dist <= 3:  # Human and goal is nearby
+            # Increase reward for correct light signals when human and goal is nearby
+            light_reward *= 2
         
         # Penalize incorrect light signals
         if row_diff <= 0 and self.light_b == self.LIGHT_ON:  # Goal is not below
@@ -385,14 +387,6 @@ class PygameEnvironment(gym.Env):
             light_reward -= 0.1
         if col_diff >= 0 and self.light_l == self.LIGHT_ON:  # Goal is not to the left
             light_reward -= 0.1
-        
-        # Reward for turning on the correct light when human is nearby
-        human_row, human_col = self.get_current_row_col(self.human)
-        human_agent_dist = abs(human_row - agent_row) + abs(human_col - agent_col)
-        
-        if human_agent_dist <= 3:  # Human is nearby
-            # Increase reward for correct light signals when human is nearby
-            light_reward *= 2
         
         return light_reward
 
