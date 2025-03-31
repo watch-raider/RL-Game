@@ -103,10 +103,9 @@ This project uses:
 - Improving the human-agent interaction interface
 - Conducting user studies to evaluate effectiveness
 
-## License
+## Challenges & Applications
 
-Challenges addressed include balancing clear communication with adaptability to human behavior, as well as optimizing the agent's strategy to ensure that the human can reach the goal as efficiently as possible. 
-This research has applications in fields like human-robot interaction, virtual assistance, and autonomous systems, where collaborative goal achievement is critical.
+Challenges addressed include balancing clear communication with adaptability to human behavior, as well as optimizing the agent's strategy to ensure that the human can reach the goal as efficiently as possible. This research has applications in fields like human-robot interaction, virtual assistance, and autonomous systems, where collaborative goal achievement is critical.
 
 ## Acknowledgments
 
