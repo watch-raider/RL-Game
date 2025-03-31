@@ -1,0 +1,16 @@
+# Core dependencies
+pygame==2.5.2
+pygame-menu==4.4.3
+gymnasium==0.29.1
+numpy==1.26.0
+
+# Reinforcement learning libraries
+stable-baselines3==2.2.1
+sb3-contrib==2.2.1
+
+# Visualization and data analysis
+matplotlib==3.8.0
+pandas==2.1.1
+
+# PyTorch (CPU version by default - users with GPUs may want to install the appropriate version)
+torch==2.1.0
