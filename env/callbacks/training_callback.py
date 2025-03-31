@@ -15,12 +15,13 @@ class TrainingLogger(BaseCallback):
         log_dir: Directory to save logs
         verbose: Verbosity level
     """
-    def __init__(self, check_freq=100, log_dir='logs', verbose=1, rl_algorithm='ppo'):
+    def __init__(self, check_freq=100, log_dir='logs', verbose=1, rl_algorithm='ppo', game_size=500):
         super().__init__(verbose)
         self.check_freq = check_freq
         self.log_dir = log_dir
         os.makedirs(log_dir, exist_ok=True)
         self.algorithm = rl_algorithm
+        self.game_size = game_size
         
         # Initialize metrics storage
         self.ep_rewards = []
@@ -38,8 +39,8 @@ class TrainingLogger(BaseCallback):
         self.ep_count = 0
         self.success_count = 0
         
-        # Create CSV log file
-        self.log_file = f"{log_dir}/{self.algorithm}_training_log.csv"
+        # Create CSV log file with game size in the name
+        self.log_file = f"{log_dir}/{self.algorithm}_{self.game_size}_training_log.csv"
         self.log_columns = ['timestep', 'episode', 'success', 'ep_reward', 'ep_length', 'ep_time', 'mean_reward', 'mean_length', 
                            'mean_time', 'success_rate', 'fps']
         
@@ -177,5 +178,5 @@ class TrainingLogger(BaseCallback):
         axs[1, 1].grid(True)
         
         plt.tight_layout()
-        plt.savefig(f"{plots_dir}/{self.algorithm}_learning_curves.png")
+        plt.savefig(f"{plots_dir}/{self.algorithm}_{self.game_size}_learning_curves.png")
         plt.close()

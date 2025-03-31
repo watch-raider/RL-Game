@@ -94,10 +94,12 @@ class PygameEnvironment(gym.Env):
 
         # Set up action and observation spaces
         self.action_space = Discrete(len(AgentAction))
+        
+        # Use normalized observation space (0 to 1) regardless of grid size
         self.observation_space = Box(
             low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # Agent x,y, Human x,y, Goal x,y, Light states
-            high=np.array([self.n_cols-1, self.n_rows-1, self.n_cols-1, self.n_rows-1, self.n_cols-1, self.n_rows-1, 1, 1, 1, 1]),
-            dtype=np.int64
+            high=np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
+            dtype=np.float32
         )
 
     def reset(self, seed=None, options=None):
@@ -391,18 +393,31 @@ class PygameEnvironment(gym.Env):
         return light_reward
 
     def _get_obs(self):
-        """Get current observation of environment state."""
+        """Get current observation of environment state with normalized coordinates."""
         
         human_row, human_col = self.get_current_row_col(self.human)
         goal_row, goal_col = self.get_current_row_col(self.goal)
         agent_row, agent_col = self.get_current_row_col(self.agent)
+        
+        # Normalize coordinates to [0,1] range
+        norm_agent_col = agent_col / (self.n_cols - 1) if self.n_cols > 1 else 0
+        norm_agent_row = agent_row / (self.n_rows - 1) if self.n_rows > 1 else 0
+        norm_human_col = human_col / (self.n_cols - 1) if self.n_cols > 1 else 0
+        norm_human_row = human_row / (self.n_rows - 1) if self.n_rows > 1 else 0
+        norm_goal_col = goal_col / (self.n_cols - 1) if self.n_cols > 1 else 0
+        norm_goal_row = goal_row / (self.n_rows - 1) if self.n_rows > 1 else 0
         
         TL = 1 if self.light_t == self.LIGHT_ON else 0
         RL = 1 if self.light_r == self.LIGHT_ON else 0
         BL = 1 if self.light_b == self.LIGHT_ON else 0
         LL = 1 if self.light_l == self.LIGHT_ON else 0
         
-        return np.array([agent_col, agent_row, human_col, human_row, goal_col, goal_row, TL, RL, BL, LL])
+        return np.array([
+            norm_agent_col, norm_agent_row, 
+            norm_human_col, norm_human_row, 
+            norm_goal_col, norm_goal_row, 
+            TL, RL, BL, LL
+        ], dtype=np.float32)
 
     def _get_info(self, is_success, is_truncated):
         """Get additional information about environment state."""

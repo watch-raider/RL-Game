@@ -10,12 +10,11 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 
-from pygame_env import PygameEnvironment
-from callbacks.human_callback import HumanCallback
-#from callbacks.tensorboard_callback import TensorboardCallback
-from callbacks.training_callback import TrainingLogger
+from env.pygame_env import PygameEnvironment
+from env.callbacks.human_callback import HumanCallback
+from env.callbacks.training_callback import TrainingLogger
 
-SCREEN_SIZE = [("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
+SCREEN_SIZE = [("400x400", 400), ("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
 LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
 
@@ -66,10 +65,10 @@ def main_menu():
                        theme=pm.themes.THEME_GREEN) 
     
     settings.add.dropselect(title="SCREEN SIZE", items=SCREEN_SIZE, onchange=set_screen,
-                            dropselect_id="screen_size", default=0)
+                            dropselect_id="screen_size", default=1)
 
     settings.add.dropselect(title="LEARNING MODEL", items=LEARNING_MODEL, onchange=set_model,
-                            dropselect_id="learning_model", default=1) 
+                            dropselect_id="learning_model", default=0) 
     
     settings.add.dropselect(title="MODE", items=MODE, onchange=set_mode,
                             dropselect_id="mode", default=0) 
@@ -102,12 +101,13 @@ def start_game():
     global screen_width, screen_height, model_name, mode
     
     env = PygameEnvironment(SCREEN_WIDTH=screen_width, SCREEN_HEIGHT=screen_height, step_limit=100)
-    model_path = f"models/{model_name}_model.zip"
+    # Include grid size in model path
+    model_path = f"models/{model_name}_{screen_width}_model.zip"
 
     if mode == "train":
         # Setup callbacks
         #tb_callback = TensorboardCallback()
-        training_callback = TrainingLogger(rl_algorithm=model_name)
+        training_callback = TrainingLogger(rl_algorithm=model_name, game_size=screen_width)
         human_callback = HumanCallback(rl_algorithm=model_name)
 
         # Combined callbacks

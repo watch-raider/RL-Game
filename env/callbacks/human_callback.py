@@ -8,27 +8,11 @@ class HumanCallback(BaseCallback):
 
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
-    def __init__(self, verbose: int = 0, rl_algorithm='ppo'):
+    def __init__(self, verbose: int = 0, rl_algorithm='ppo', game_size=500):
         super().__init__(verbose)
-        # Those variables will be accessible in the callback
-        # (they are defined in the base class)
-        # The RL model
-        # self.model = None  # type: BaseAlgorithm
-        # An alias for self.model.get_env(), the environment used for training
-        # self.training_env # type: VecEnv
-        # Number of time the callback was called
-        # self.n_calls = 0  # type: int
-        # num_timesteps = n_envs * n times env.step() was called
-        # self.num_timesteps = 0  # type: int
-        # local and global variables
-        # self.locals = {}  # type: Dict[str, Any]
-        # self.globals = {}  # type: Dict[str, Any]
-        # The logger object, used to report things in the terminal
-        # self.logger # type: stable_baselines3.common.logger.Logger
-        # Sometimes, for event callback, it is useful
-        # to have access to the parent object
-        # self.parent = None  # type: Optional[BaseCallback]
+        
         self.algorithm = rl_algorithm
+        self.game_size = game_size
 
     def _on_training_start(self) -> None:
         """
@@ -60,7 +44,7 @@ class HumanCallback(BaseCallback):
             # Save the model when the human reaches the goal (end of episode)
             cwd = os.getcwd()
             self.model.save(f"{cwd}/models/{self.algorithm}_model")
-            print(f"Model saved to path: {cwd}/models/{self.algorithm}_model")
+            print(f"Model saved to path: {cwd}/models/{self.algorithm}_{self.game_size}_model")
 
         return True
 
