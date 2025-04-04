@@ -27,12 +27,12 @@ class AgentAction(Enum):
     LIGHT_DOWN_TOGGLE = 7
 
 class PygameEnvironment(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 30}
+    metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 30}
     LIGHT_OFF = (180, 180, 180)
     LIGHT_ON = (255, 165, 0)
     PLAYER_SIZE = 50
 
-    def __init__(self, SCREEN_WIDTH=500, SCREEN_HEIGHT=500, render_mode="human", step_limit=50):
+    def __init__(self, SCREEN_WIDTH=500, SCREEN_HEIGHT=500, render_mode="human", step_limit=100):
         """Initialize the environment with given screen dimensions and mode.
         
         Args:

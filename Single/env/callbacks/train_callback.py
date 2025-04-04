@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from stable_baselines3.common.callbacks import BaseCallback
 
-class TrainingLogger(BaseCallback):
+class TrainLogger(BaseCallback):
     """
     Callback for logging training metrics during reinforcement learning.
     
@@ -38,15 +38,17 @@ class TrainingLogger(BaseCallback):
         # Track episode successes
         self.ep_count = 0
         self.success_count = 0
+        self.timestep_count = 0
         
         # Create CSV log file with game size in the name
-        self.log_file = f"{log_dir}/{self.algorithm}_{self.game_size}_training_log.csv"
+        self.log_file = f"{log_dir}/{self.algorithm}_{self.game_size}_train_log.csv"
         self.log_columns = ['timestep', 'episode', 'success', 'ep_reward', 'ep_length', 'ep_time', 'mean_reward', 'mean_length', 
                            'mean_time', 'success_rate', 'fps']
         
         # Initialize log dataframe
         if os.path.exists(self.log_file):
             self.log_df = pd.read_csv(self.log_file)
+            self.timestep_count = self.log_df['timestep'].iloc[-1]
             self.ep_count = self.log_df['episode'].iloc[-1]
             self.success_count = sum(self.log_df['success'].tolist())
             self.current_ep_reward = self.log_df['ep_reward'].iloc[-1]
@@ -62,6 +64,8 @@ class TrainingLogger(BaseCallback):
 
     def _on_step(self) -> bool:
         """Called after each step in the environment"""
+        self.training_env.render()
+
         # Update current episode stats
         self.current_ep_reward += self.locals['rewards'][0]
         self.current_ep_length += 1
@@ -101,6 +105,9 @@ class TrainingLogger(BaseCallback):
             mean_time = np.mean(self.ep_times[-100:]) if self.ep_times else 0
             success_rate_value = self.success_rate[-1] if self.success_rate else 0
             fps = self.check_freq / (time.time() - self.start_time) if self.ep_times else 0
+
+            if self.num_timesteps < self.timestep_count:
+                self.num_timesteps += self.timestep_count
             
             # Log to console if verbose
             if self.verbose > 0:
@@ -131,6 +138,11 @@ class TrainingLogger(BaseCallback):
             
             # Reset timer for FPS calculation
             self.start_time = time.time()
+
+            if self.ep_count % 5 == 0:
+                path = f"./models/{self.algorithm}_model"
+                self.model.save(path)
+                print(f"Model saved to path: {path}")
         
         return True
     
@@ -178,5 +190,5 @@ class TrainingLogger(BaseCallback):
         axs[1, 1].grid(True)
         
         plt.tight_layout()
-        plt.savefig(f"{plots_dir}/{self.algorithm}_{self.game_size}_learning_curves.png")
+        plt.savefig(f"{plots_dir}/{self.algorithm}_{self.game_size}_train_curves.png")
         plt.close()
