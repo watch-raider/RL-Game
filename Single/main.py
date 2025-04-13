@@ -11,11 +11,10 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 
 from env.pygame_env import PygameEnvironment
-from env.callbacks.train_callback import TrainLogger
-from env.callbacks.eval_callback import EvalLogger
+from env.callbacks.train_callback import TrainLogger, RandomLogger
 
 SCREEN_SIZE = [("400x400", 400), ("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
-LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c")]
+LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c"), ("RANDOM", "random")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
 
 # Standard RGB colors 
@@ -108,31 +107,52 @@ def start_game():
     
     # Include grid size in model path
     model_path = f"./models/{model_name}_model.zip"
+    
 
     if mode == "train":
-        # Setup callbacks
-        log_callback = TrainLogger(rl_algorithm=model_name, game_size=screen_width)
+        if model_name == "random":
+            log_callback = RandomLogger(rl_algorithm=model_name, game_size=screen_width)
+            observation, info = env.reset()
 
-        # Check if the model file exists
-        if os.path.exists(model_path):
-            print(f"Load and train existing {model_name.upper()} model...")
-            if model_name == "a2c":
-                model = A2C.load(model_path, env=env, device="cpu")
-            if model_name == "ppo":
-                model = PPO.load(model_path, env=env, device="cpu")
-            elif model_name == "trpo":
-                model = TRPO.load(model_path, env=env, device="cpu")
+            termination, truncation = False, False
+            timestep = 0
+
+            while True:
+                timestep += 1
+                if termination or truncation:
+                    observation, info = env.reset()
+                # this is where you would insert your policy
+                action = env.action_space.sample()
+
+                observation, reward, termination, truncation, info = env.step(action)
+                env.render()
+                log_callback._on_step(reward=reward, info=info, timestep=timestep)
+            env.close()
         else:
-            # Define and Train the agent
-            print(f"Training new {model_name.upper()} model...")
-            if model_name == "a2c":
-                model = A2C("MlpPolicy", env=env, device="cpu")
-            if model_name == "ppo":
-                model = PPO("MlpPolicy", env=env, device="cpu")
-            elif model_name == "trpo":
-                model = TRPO("MlpPolicy", env=env, device="cpu")
+            # Setup callbacks
+            log_callback = TrainLogger(rl_algorithm=model_name, game_size=screen_width)
+
+            # Check if the model file exists
+            if os.path.exists(model_path):
+                print(f"Load and train existing {model_name.upper()} model...")
+                if model_name == "a2c":
+                    model = A2C.load(model_path, env=env, device="cpu")
+                if model_name == "ppo":
+                    model = PPO.load(model_path, env=env, device="cpu")
+                elif model_name == "trpo":
+                    model = TRPO.load(model_path, env=env, device="cpu")
+            else:
+                # Define and Train the agent
+                print(f"Training new {model_name.upper()} model...")
+                if model_name == "a2c":
+                    model = A2C("MlpPolicy", env=env, device="cpu")
+                if model_name == "ppo":
+                    model = PPO("MlpPolicy", env=env, device="cpu")
+                elif model_name == "trpo":
+                    model = TRPO("MlpPolicy", env=env, device="cpu")
         
-        model.learn(total_timesteps=10000, callback=log_callback)
+        
+            model.learn(total_timesteps=10000, callback=log_callback)
 
     elif mode == "eval":
         print(f"Evaluate {model_name.upper()} model...")

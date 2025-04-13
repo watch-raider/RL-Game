@@ -138,7 +138,7 @@ def start_game():
             elif model_name == "trpo":
                 model = TRPO("MlpPolicy", env, device="cpu")
         
-        model.learn(total_timesteps=50000, callback=log_callback)
+        model.learn(total_timesteps=100000, callback=log_callback)
         model.save(model_path)
         print(f"Model saved to path: {model_path}")
 
