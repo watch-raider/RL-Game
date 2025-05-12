@@ -4,17 +4,17 @@ import pygame_menu as pm
 import os
 import numpy as np
 
-from stable_baselines3 import A2C, PPO
+from stable_baselines3 import DQN, A2C, PPO
 from sb3_contrib import TRPO
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 
-from env.pygame_env import PygameEnvironment
+from env.single_pygame_env import PygameEnvironment
 from env.callbacks.train_callback import TrainLogger, RandomLogger
 
 SCREEN_SIZE = [("400x400", 400), ("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
-LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c"), ("RANDOM", "random")]
+LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c"), ("DQN", "dqn"), ("RANDOM", "random")]
 MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
 
 # Standard RGB colors 
@@ -107,10 +107,21 @@ def start_game():
     
     # Include grid size in model path
     model_path = f"./models/{model_name}_model.zip"
-    
+
+    model_configs = {
+        "a2c": {'policy': 'MlpPolicy', 'learning_rate': 0.0004027083606751521, 'n_steps': 20, 'gae_lambda': 0.9888133035583276, 'vf_coef': 0.6628359185991031, 'ent_coef': 0.009503796675472118},
+        "ppo": {'policy': 'MlpPolicy', 'learning_rate': 0.0002189729779385502, 'batch_size': 128, 'n_steps': 1536, 'clip_range': 0.17761156384383014, 'n_epochs': 6},
+        "trpo": {"policy": "MlpPolicy", 'learning_rate': 0.00020121633649761026, 'target_kl': 0.0069158498039823225, 'n_steps': 1536, 'batch_size': 128, 'gae_lambda': 0.9492984415265627},
+        "dqn": {'policy': 'MlpPolicy', 'learning_rate': 0.000230912698109279, 'batch_size': 32, 'exploration_fraction': 0.05882560835087349, 'exploration_final_eps': 0.05917832438718523, 'target_update_interval': 3000}
+    }
+
+    if model_name != "random":
+        model_class = {"a2c": A2C, "ppo": PPO, "trpo": TRPO, "dqn": DQN}[model_name]
+    device = "cpu"
 
     if mode == "train":
         if model_name == "random":
+            # Setup callbacks
             log_callback = RandomLogger(rl_algorithm=model_name, game_size=screen_width)
             observation, info = env.reset()
 
@@ -133,23 +144,13 @@ def start_game():
             log_callback = TrainLogger(rl_algorithm=model_name, game_size=screen_width)
 
             # Check if the model file exists
-            if os.path.exists(model_path):
-                print(f"Load and train existing {model_name.upper()} model...")
-                if model_name == "a2c":
-                    model = A2C.load(model_path, env=env, device="cpu")
-                if model_name == "ppo":
-                    model = PPO.load(model_path, env=env, device="cpu")
-                elif model_name == "trpo":
-                    model = TRPO.load(model_path, env=env, device="cpu")
-            else:
-                # Define and Train the agent
-                print(f"Training new {model_name.upper()} model...")
-                if model_name == "a2c":
-                    model = A2C("MlpPolicy", env=env, device="cpu")
-                if model_name == "ppo":
-                    model = PPO("MlpPolicy", env=env, device="cpu")
-                elif model_name == "trpo":
-                    model = TRPO("MlpPolicy", env=env, device="cpu")
+        if os.path.exists(model_path):
+            print(f"Load and train existing {model_name.upper()} model...")
+            model = model_class.load(model_path, env=env, device=device)
+        else:
+            # Define and Train the agent
+            print(f"Training new {model_name.upper()} model...")
+            model = model_class(env=env, device=device, **model_configs[model_name])
         
         
             model.learn(total_timesteps=10000, callback=log_callback)
@@ -161,12 +162,9 @@ def start_game():
 
         # Load the trained model
         if os.path.exists(model_path):
-            if model_name == "a2c":
-                model = A2C.load(model_path)
-            if model_name == "ppo":
-                model = PPO.load(model_path)
-            elif model_name == "trpo":
-                model = TRPO.load(model_path)
+            print(f"Load and evaluate existing {model_name.upper()} model...")
+            model = model_class.load(model_path, env=env, device=device)
+
                 
             # Run evaluation
             mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, render=True)

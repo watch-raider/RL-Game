@@ -4,21 +4,23 @@ import pygame_menu as pm
 import os
 import numpy as np
 
-from stable_baselines3 import A2C, PPO
+from stable_baselines3 import A2C, PPO, DQN
 from sb3_contrib import TRPO
 from stable_baselines3.common.evaluation import evaluate_policy
 
 import supersuit as ss
 
-from env.pygame_env import PygameEnvironment
+from env.multi_pygame_env import PygameEnvironment
 from env.callbacks.train_callback import TrainLogger
+from tuning import define_model
 
+import optuna
 from pettingzoo.test import parallel_api_test
 
 SCREEN_SIZE = [("400x400", 400), ("500x500", 500), ("600x600", 600), ("700x700", 700), ("800x800", 800)]
-LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c")]
-MODE = [("TRAINING", "train"), ("EVALUATION", "eval")]
-SELF_PLAY = [("HUMAN", True), ("AGENT", False)]
+LEARNING_MODEL = [("PPO", "ppo"), ("TRPO", "trpo"), ("A2C", "a2c"), ("DQN", "dqn")]
+MODE = [("TRAINING", "train"), ("EVALUATION", "eval"), ("TUNE", "tune")]
+SELF_PLAY = [("HUMAN", False), ("AGENT", True)]
 
 # Standard RGB colors 
 RED = (255, 0, 0)
@@ -101,12 +103,17 @@ def main_menu():
 def start_game():
     global screen_width, screen_height, model_name, mode, self_play
 
+    valid_models = ["a2c", "ppo", "trpo", "dqn"]
+    if model_name not in valid_models:
+        raise ValueError(f"Invalid model_name: {model_name}. Choose from {valid_models}")
+
     # Create environment with render_mode
     env = PygameEnvironment(
         SCREEN_WIDTH=screen_width, 
         SCREEN_HEIGHT=screen_height, 
         step_limit=100,
-        self_play=self_play
+        self_play=self_play,
+        model_name=model_name
     )
 
     env = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -114,31 +121,53 @@ def start_game():
 
     # Include grid size in model path
     model_path = f"models/{model_name}_model.zip"
+
+    model_configs = {
+        "a2c": {'policy': 'MlpPolicy', 'learning_rate': 0.0004027083606751521, 'n_steps': 20, 'gae_lambda': 0.9888133035583276, 'vf_coef': 0.6628359185991031, 'ent_coef': 0.009503796675472118},
+        "ppo": {'policy': 'MlpPolicy', 'learning_rate': 0.0002189729779385502, 'batch_size': 128, 'n_steps': 1536, 'clip_range': 0.17761156384383014, 'n_epochs': 6},
+        "trpo": {"policy": "MlpPolicy", 'learning_rate': 0.00020121633649761026, 'target_kl': 0.0069158498039823225, 'n_steps': 1536, 'batch_size': 128, 'gae_lambda': 0.9492984415265627},
+        "dqn": {'policy': 'MlpPolicy', 'learning_rate': 0.000230912698109279, 'batch_size': 32, 'exploration_fraction': 0.05882560835087349, 'exploration_final_eps': 0.05917832438718523, 'target_update_interval': 3000}
+    }
+
+    model_class = {"a2c": A2C, "ppo": PPO, "trpo": TRPO, "dqn": DQN}[model_name]
+    device = "cpu"
+    n_trials=50
     
+    if mode == "tune":
+        print(f"Tuning hyperparameters for {model_name.upper()}...")
+
+        # Setup callbacks
+        log_callback = TrainLogger(log_dir="logs_tuning", rl_algorithm=model_name, game_size=screen_width, verbose=0)
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(
+            lambda trial: objective(env, trial, model_name, log_callback),
+            n_trials=n_trials
+        )
+        
+        # Print the best hyperparameters
+        print("Best hyperparameters:", study.best_params)
+        print("Best mean reward:", study.best_value)
+
     if mode == "train":
         # Setup callbacks
-        log_callback = TrainLogger(rl_algorithm=model_name, game_size=screen_width, self_play=self_play)
-        
+        if self_play == True:
+            log_dir = "logs"
+        else:
+            log_dir = "logs_human"
+        log_callback = TrainLogger(log_dir=log_dir, rl_algorithm=model_name, game_size=screen_width)
+
         # Check if the model file exists
         if os.path.exists(model_path):
             print(f"Load and train existing {model_name.upper()} model...")
-            if model_name == "a2c":
-                model = A2C.load(model_path, env=env, device="cpu")
-            if model_name == "ppo":
-                model = PPO.load(model_path, env=env, device="cpu")
-            elif model_name == "trpo":
-                model = TRPO.load(model_path, env=env, device="cpu")
+            model = model_class.load(model_path, env=env, device=device)
         else:
             # Define and Train the agent
             print(f"Training new {model_name.upper()} model...")
-            if model_name == "a2c":
-                model = A2C("MlpPolicy", env, device="cpu")
-            if model_name == "ppo":
-                model = PPO("MlpPolicy", env, device="cpu")
-            elif model_name == "trpo":
-                model = TRPO("MlpPolicy", env, device="cpu")
+            model = model_class(env=env, device=device, **model_configs[model_name])
+            #model = model_class(env=env, device=device, policy="MlpPolicy")
         
-        model.learn(total_timesteps=100000, callback=log_callback)
+        model.learn(total_timesteps=250000, callback=log_callback)
         model.save(model_path)
         print(f"Model saved to path: {model_path}")
 
@@ -147,12 +176,7 @@ def start_game():
         
         # Load the trained model
         if os.path.exists(model_path):
-            if model_name == "a2c":
-                model = A2C.load(model_path)
-            if model_name == "ppo":
-                model = PPO.load(model_path)
-            elif model_name == "trpo":
-                model = TRPO.load(model_path)
+            model = model_class.load(model_path, env=env, device=device)
                 
             # Run evaluation
             mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, render=True)
@@ -161,6 +185,17 @@ def start_game():
             print(f"No trained model found at {model_path}. Please train the model first.")
         
     pygame.quit()
+
+def objective(env, trial, model_name, log_callback, total_timesteps=10000):
+    """Optuna objective function to optimize hyperparameters."""
+    model = define_model(model_name, env, trial)
+    
+    model.learn(total_timesteps=total_timesteps, callback=log_callback)
+
+    # Default to mean reward
+    metric_value, _ = evaluate_policy(model, env, n_eval_episodes=10, render=False)
+    
+    return metric_value
 
 def main():
     # Initialize pygame first

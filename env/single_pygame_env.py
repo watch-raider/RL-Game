@@ -8,7 +8,7 @@ from enum import Enum
 import time
 import numpy as np
 
-from env.reward_config import REWARD_CONFIG
+from configs.reward_config import REWARD_CONFIG_V1, REWARD_CONFIG_V2
 
 # Standard RGB colors 
 RED = (255, 0, 0) 
@@ -90,7 +90,8 @@ class PygameEnvironment(gym.Env):
         self.clock = pygame.time.Clock()
         self.current_time = time.time()
         self.last_action_time = time.time()
-        self.action_delay = 1  # 1 seconds between actions
+        self.action_delay = 0.5  # 1 seconds between actions
+        self.reward_config = REWARD_CONFIG_V2
 
         self.reset_lights()
 
@@ -132,6 +133,7 @@ class PygameEnvironment(gym.Env):
         self.goal = pygame.Rect(goal_pos[0], goal_pos[1], self.PLAYER_SIZE, self.PLAYER_SIZE)
 
         self.agent_step = 0
+        self.ep_collisions = 0
 
         self.reset_lights()
         self.human_take_action = False
@@ -315,54 +317,60 @@ class PygameEnvironment(gym.Env):
         Returns:
             tuple: (reward, terminated)
         """
-        reward = 0
+        pos_reward = 0
+        neg_reward = 0
         terminated = False
 
         # Add time-based penalty to encourage faster completion
-        reward += REWARD_CONFIG["time_penalty"]
+        #neg_reward += self.reward_config["time_penalty"]
         
         human_new_dist = self.calculate_manhattan_distance(self.human, self.goal)
-        proximity_scale = 1 - (human_new_dist / (self.n_cols + self.n_rows - 1))
-        proximity_scale = max(0.0, min(1.0, proximity_scale))
+
         if human_new_dist < human_old_dist:
             # Human moved closer to goal
-            reward += REWARD_CONFIG["human_progress_base"] * proximity_scale  # Significant reward for successfully guiding the human
-        elif human_new_dist > human_old_dist:
+            pos_reward += self.reward_config["human_progress_base"]  # Significant reward for successfully guiding the human
+        elif human_new_dist >= human_old_dist:
             # Human moved away from goal
-            reward += REWARD_CONFIG["human_progress_penalty"]
+            neg_reward += self.reward_config["human_progress_penalty"]
 
         # Light-based rewards
-        light_reward = self.calculate_light_reward()
-        reward += light_reward
+        pos_light_reward, neg_light_reward = self.calculate_light_reward()
+        pos_reward += pos_light_reward
+        neg_reward += neg_light_reward
 
         # Penalise trying to move outside of the grid
         agent_current_row, agent_current_col = self.get_current_row_col(self.agent)
         if agent_current_row == agent_old_row and agent_current_col == agent_old_col:
             if agent_action == AgentAction.MOVE_UP.value or agent_action == AgentAction.MOVE_RIGHT.value or agent_action == AgentAction.MOVE_DOWN.value or agent_action == AgentAction.MOVE_LEFT.value:
-                reward += REWARD_CONFIG["bump_penalty"]
+                neg_reward += self.reward_config["bump_penalty"]
 
         # Special state rewards
         if self.human.center == self.agent.center:
-            reward += REWARD_CONFIG["collision_penalty"]
-            self.score += REWARD_CONFIG["collision_penalty"]
+            neg_reward += self.reward_config["collision_penalty"]
+            self.score += self.reward_config["collision_penalty"]
+            self.ep_collisions += 1
         elif self.human.center == self.goal.center:
-            progress_ratio = 1 -  (self.agent_step / self.step_limit)
-            speed_bonus = min(1, max(0, progress_ratio))  # Ensures non-negative
-            
-            goal_agent_dist = self.calculate_manhattan_distance(self.goal, self.agent)
-            proximity_scale = 1 - (goal_agent_dist / (self.n_cols + self.n_rows - 1))
-            proximity_scale = max(0, min(proximity_scale, 1))
+            speed_bonus = (self.step_limit - self.agent_step) // 10
 
-            reward += REWARD_CONFIG["goal_reward_base"] * (1 + speed_bonus)
-            reward *= proximity_scale
-            self.score += REWARD_CONFIG["goal_reward_base"]
+            pos_reward += self.reward_config["goal_reward_base"] + speed_bonus
+            self.score += self.reward_config["goal_reward_base"]
             terminated = True
+
+        G_A_dist = self.calculate_manhattan_distance(self.goal, self.agent)
+        H_A_dist = self.calculate_manhattan_distance(self.human, self.agent)
+        H_G_dist = self.calculate_manhattan_distance(self.human, self.goal)
+
+        if H_A_dist <= 3:
+            pos_reward += self.reward_config["proximity_reward"]
+
+        reward = pos_reward + neg_reward
 
         return reward, terminated
     
     def calculate_light_reward(self):
         """Calculate reward based on light signals guiding human toward goal."""
-        light_reward = 0
+        pos_light_reward = 0
+        neg_light_reward = 0
         
         # Get the relative position of the goal compared to the agent
         agent_row, agent_col = self.get_current_row_col(self.agent)
@@ -372,23 +380,15 @@ class PygameEnvironment(gym.Env):
         row_diff = goal_row - agent_row  # Positive if goal is below agent
         col_diff = goal_col - agent_col  # Positive if goal is to the right of agent
         
-        # Reward for turning on the correct light when human and goal is nearby
-        human_agent_dist = self.calculate_manhattan_distance(self.human, self.agent)
-        goal_agent_dist = self.calculate_manhattan_distance(self.goal, self.agent)
-        human_proximity_scale = 1 - (human_agent_dist / (self.n_cols + self.n_rows - 1))
-        goal_proximity_scale = 1 - (goal_agent_dist / (self.n_cols + self.n_rows - 1))
-        avg_proximity_scale = (human_proximity_scale + goal_proximity_scale) / 2
-        avg_proximity_scale = max(0, min(avg_proximity_scale, 1))
-
         # Reward for correct light signals
         if row_diff > 0 and self.light_b == self.LIGHT_ON:  # Goal is below
-            light_reward += REWARD_CONFIG["light_correct"] * (1 + avg_proximity_scale)
+            pos_light_reward += self.reward_config["light_correct"]
         if row_diff < 0 and self.light_t == self.LIGHT_ON:  # Goal is above
-            light_reward += REWARD_CONFIG["light_correct"] * (1 + avg_proximity_scale)
+            pos_light_reward += self.reward_config["light_correct"]
         if col_diff > 0 and self.light_r == self.LIGHT_ON:  # Goal is to the right
-            light_reward += REWARD_CONFIG["light_correct"] * (1 + avg_proximity_scale)
+            pos_light_reward += self.reward_config["light_correct"]
         if col_diff < 0 and self.light_l == self.LIGHT_ON:  # Goal is to the left
-            light_reward += REWARD_CONFIG["light_correct"] * (1 + avg_proximity_scale)
+            pos_light_reward += self.reward_config["light_correct"]
         
         num_lights_on = sum([
             self.light_t == self.LIGHT_ON,
@@ -397,19 +397,19 @@ class PygameEnvironment(gym.Env):
             self.light_r == self.LIGHT_ON
         ])
 
-        light_reward *= min(1, 1.25 - (num_lights_on / 4))
+        pos_light_reward *= min(1, 1.25 - (num_lights_on / 4))
 
         # Penalize incorrect light signals
         if row_diff <= 0 and self.light_b == self.LIGHT_ON:  # Goal is not below
-            light_reward += REWARD_CONFIG["light_incorrect"]
+            neg_light_reward += self.reward_config["light_incorrect"]
         if row_diff >= 0 and self.light_t == self.LIGHT_ON:  # Goal is not above
-            light_reward += REWARD_CONFIG["light_incorrect"]
+            neg_light_reward += self.reward_config["light_incorrect"]
         if col_diff <= 0 and self.light_r == self.LIGHT_ON:  # Goal is not to the right
-            light_reward += REWARD_CONFIG["light_incorrect"]
+            neg_light_reward += self.reward_config["light_incorrect"]
         if col_diff >= 0 and self.light_l == self.LIGHT_ON:  # Goal is not to the left
-            light_reward += REWARD_CONFIG["light_incorrect"]
+            neg_light_reward += self.reward_config["light_incorrect"]
         
-        return light_reward
+        return pos_light_reward, neg_light_reward
 
     def _get_obs(self):
         """Get current observation of environment state with normalized coordinates."""
@@ -443,7 +443,8 @@ class PygameEnvironment(gym.Env):
         return {
             "distance": self.calculate_manhattan_distance(self.human, self.goal),
             "is_success": is_success,
-            "is_truncated": is_truncated
+            "is_truncated": is_truncated,
+            "ep_collisions": self.ep_collisions
         }
 
     def calculate_manhattan_distance(self, origin, target):

@@ -15,9 +15,8 @@ class TrainLogger(BaseCallback):
         log_dir: Directory to save logs
         verbose: Verbosity level
     """
-    def __init__(self, check_freq=100, log_dir='logs', verbose=1, rl_algorithm='ppo', game_size=500):
+    def __init__(self, log_dir='logs', verbose=1, rl_algorithm='ppo', game_size=500):
         super().__init__(verbose)
-        self.check_freq = check_freq
         self.log_dir = log_dir
         os.makedirs(log_dir, exist_ok=True)
         self.algorithm = rl_algorithm
@@ -28,6 +27,7 @@ class TrainLogger(BaseCallback):
         self.ep_lengths = []
         self.ep_times = []
         self.success_rate = []
+        self.reward_fitness = []
         
         # For tracking current episode
         self.current_ep_reward = 0
@@ -43,7 +43,7 @@ class TrainLogger(BaseCallback):
         # Create CSV log file with game size in the name
         self.log_file = f"{log_dir}/{self.algorithm}_{self.game_size}_train_log.csv"
         self.log_columns = ['timestep', 'episode', 'success', 'ep_reward', 'ep_length', 'ep_time', 'mean_reward', 'mean_length', 
-                           'mean_time', 'success_rate', 'fps']
+                           'mean_time', 'success_rate', 'ep_reward_fitness', 'mean_reward_fitness']
         
         # Initialize log dataframe
         if os.path.exists(self.log_file):
@@ -57,6 +57,7 @@ class TrainLogger(BaseCallback):
             self.ep_lengths = self.log_df['ep_length'].tolist()
             self.ep_times = self.log_df['ep_time'].tolist()
             self.success_rate = self.log_df['success_rate'].tolist()
+            self.reward_fitness = self.log_df['ep_reward_fitness'].tolist()
         else:
             self.log_df = pd.DataFrame(columns=self.log_columns)
             self.log_df.to_csv(self.log_file, index=False)
@@ -69,20 +70,32 @@ class TrainLogger(BaseCallback):
         # Update current episode stats
         self.current_ep_reward += self.locals['rewards'][0]
         self.current_ep_length += 1
+        task_fitness = 0
+        risk_fitness = 0
         
         # Check if episode ended
         is_success = self.locals['infos'][0].get('is_success', False)
         is_truncated = self.locals['infos'][0].get('is_truncated', False)
+        ep_collisions = self.locals['infos'][0].get('ep_collisions', 0)
+
 
         if is_success or is_truncated:
+            risk_fitness -= ep_collisions
             # Track if this was a successful episode
             if is_success:
                 self.success_count += 1
+                task_fitness += 10
+                task_fitness += (100 - self.current_ep_length) // 10
+            else:
+                task_fitness -= 10
+
+            reward_fitness = risk_fitness + task_fitness
             
             # Record episode data
             self.ep_count += 1
             self.ep_rewards.append(self.current_ep_reward)
             self.ep_lengths.append(self.current_ep_length)
+            self.reward_fitness.append(reward_fitness)
             
             # Track episode time
             current_time = time.time()
@@ -100,11 +113,11 @@ class TrainLogger(BaseCallback):
                 #self.success_count -= 1 if self.locals['infos'][0].get('is_success', False) else 0
         
             # Calculate metrics
-            mean_reward = np.mean(self.ep_rewards[-100:]) if self.ep_rewards else 0
-            mean_length = np.mean(self.ep_lengths[-100:]) if self.ep_lengths else 0
-            mean_time = np.mean(self.ep_times[-100:]) if self.ep_times else 0
+            mean_reward = np.mean(self.ep_rewards[-120:]) if self.ep_rewards else 0
+            mean_length = np.mean(self.ep_lengths[-120:]) if self.ep_lengths else 0
+            mean_time = np.mean(self.ep_times[-120:]) if self.ep_times else 0
+            mean_reward_fitness = np.mean(self.reward_fitness[-120:]) if self.reward_fitness else 0
             success_rate_value = self.success_rate[-1] if self.success_rate else 0
-            fps = self.check_freq / (time.time() - self.start_time) if self.ep_times else 0
 
             if self.num_timesteps < self.timestep_count:
                 self.num_timesteps += self.timestep_count
@@ -113,7 +126,7 @@ class TrainLogger(BaseCallback):
             if self.verbose > 0:
                 print(f"Steps: {self.num_timesteps}, Episodes: {self.ep_count}")
                 print(f"Mean reward: {mean_reward:.2f}, Mean episode length: {mean_length:.2f}")
-                print(f"Success rate: {success_rate_value:.2%}, FPS: {fps:.2f}")
+                print(f"Success rate: {success_rate_value:.2%} Mean Reward fitness: {mean_reward_fitness:.2f}")
             
             # Update log file
             log_data = {
@@ -127,7 +140,8 @@ class TrainLogger(BaseCallback):
                 'mean_length': mean_length,
                 'mean_time': mean_time, 
                 'success_rate': success_rate_value,
-                'fps': fps
+                'ep_reward_fitness': reward_fitness,
+                'mean_reward_fitness': mean_reward_fitness
             }
             
             # Append to CSV
@@ -135,14 +149,11 @@ class TrainLogger(BaseCallback):
             
             # Plot learning curves
             self.plot_learning_curves()
-            
-            # Reset timer for FPS calculation
-            self.start_time = time.time()
 
-            if self.ep_count % 5 == 0:
-                path = f"./models/{self.algorithm}_model"
-                self.model.save(path)
-                print(f"Model saved to path: {path}")
+            if self.ep_count % 10 == 0:
+               path = f"./models/{self.algorithm}_model"
+               self.model.save(path)
+               print(f"Model saved to path: {path}")
         
         return True
     
@@ -182,11 +193,11 @@ class TrainLogger(BaseCallback):
         axs[1, 0].set_ylabel('Rate')
         axs[1, 0].grid(True)
         
-        # FPS plot
-        axs[1, 1].plot(data['episode'], data['fps'])
-        axs[1, 1].set_title('Training Speed (FPS)')
+        # Reward Fitness plot
+        axs[1, 1].plot(data['episode'], data['mean_reward_fitness'])
+        axs[1, 1].set_title('Mean Reward Fitness')
         axs[1, 1].set_xlabel('Episode')
-        axs[1, 1].set_ylabel('Frames per second')
+        axs[1, 1].set_ylabel('Reward Fitness')
         axs[1, 1].grid(True)
         
         plt.tight_layout()
