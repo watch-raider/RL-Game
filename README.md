@@ -2,13 +2,7 @@
 
 ## Project Overview
 
-This repository contains two distinct projects exploring how AI agents can learn to cooperate with either humans or other AI agents:
-
-### Single Agent Project
-- The environment is a grid-based game where the human player (red square) must find a goal
-- The AI agent (blue square) can move around and toggle directional lights to guide the human
-- The agent receives rewards when the human moves closer to the goal and penalties when the human moves away
-- The agent learns over time to provide better guidance through reinforcement learning
+This repository contains a project exploring how AI agents can learn to cooperate with each other in a cooperative environment:
 
 ### Multi-Agent Project
 - A cooperative environment where two AI agents work together to achieve a common goal
@@ -21,13 +15,6 @@ This repository contains two distinct projects exploring how AI agents can learn
 ![Game Demo](./pygame_clip.gif) 
 
 ## Features
-
-### Single Agent Project
-- Grid-based environment with human and AI agent interaction
-- Multiple reinforcement learning algorithms (PPO, TRPO, A2C)
-- Training and evaluation modes
-- Performance tracking and visualization
-- Customizable environment settings
 
 ### Multi-Agent Project
 - PettingZoo-based multi-agent environment
@@ -51,78 +38,33 @@ This repository contains two distinct projects exploring how AI agents can learn
    cd RL-Game
    ```
 
-2. Create virtual environments for each project:
+2. Create virtual environment:
    ```
-   # For Single Agent Project
-   cd Single
-   python -m venv env
-   source env/bin/activate  # On Windows: env\Scripts\activate
-   pip install -r requirements.txt
-
-   # For Multi-Agent Project
-   cd ../Multi
    python -m venv env
    source env/bin/activate  # On Windows: env\Scripts\activate
    pip install -r requirements.txt
    ```
 
-### Running the Applications
+### Running the Application
 
-#### Single Agent Project
-1. Navigate to the Single directory:
-   ```
-   cd Single
-   ```
-
-2. Run the main application:
+1. Run the main application:
    ```
    python main.py
    ```
 
-3. Use the menu to:
-   - Select screen size
-   - Choose a learning model (PPO, TRPO, or A2C)
-   - Select mode (Training or Evaluation)
-   - Start the game
-
-#### Multi-Agent Project
-1. Navigate to the Multi directory:
-   ```
-   cd Multi
-   ```
-
-2. Run the main application:
-   ```
-   python main.py
-   ```
-
-3. Use the menu to:
+2. Use the menu to:
    - Select screen size
    - Choose a learning model
-   - Select mode (Training or Evaluation)
+   - Select mode (Training, Evaluation or Tuning)
    - Start the simulation
 
-### How to Play
+### How to Use
 
-#### Single Agent Project
-- **As a human player**: Use the arrow keys to move the red square
-- **Watch the AI agent**: The blue square will move and toggle lights to guide you
-- **Goal**: Follow the agent's guidance to find the hidden goal
-
-#### Multi-Agent Project
 - **Watch the AI agents**: Two AI agents will work together to achieve the goal
 - **Goal**: Observe how the agents learn to cooperate and improve their strategies
 
 ## Project Structure
 
-### Single Agent Project
-- `env/pygame_env.py`: The main environment implementation
-- `env/main.py`: Application entry point with menu system
-- `env/callbacks/`: Contains callback implementations for training and logging
-- `models/`: Saved model files
-- `logs/`: Training logs and performance metrics
-
-### Multi-Agent Project
 - `env/`: Environment implementation using PettingZoo
 - `main.py`: Application entry point with menu system
 - `models/`: Saved model files
@@ -133,32 +75,28 @@ This repository contains two distinct projects exploring how AI agents can learn
 This project uses:
 - PyGame for the environment and visualisation
 - Stable-Baselines3 for reinforcement learning algorithms
-- Gymnasium for single-agent environments
 - PettingZoo for multi-agent environments
 - Matplotlib and Pandas for data visualisation and analysis
 
 ## Future Work
 
-- Implementing more sophisticated guidance mechanisms
 - Adding different environment types and challenges
-- Improving the human-agent interaction interface
 - Enhancing multi-agent cooperation strategies
-- Conducting user studies to evaluate effectiveness
+- Implementing more sophisticated reward mechanisms
+- Conducting studies to evaluate effectiveness
 
 ## Challenges & Applications
 
 Challenges addressed include:
-- Balancing clear communication with adaptability to human behavior
-- Optimizing the agent's strategy to ensure efficient goal achievement
 - Developing effective cooperation strategies between AI agents
 - Managing shared rewards and learning in multi-agent systems
+- Optimizing the agents' strategies to ensure efficient goal achievement
 
 This research has applications in fields like:
-- Human-robot interaction
-- Virtual assistance
-- Autonomous systems
 - Multi-agent systems
 - Collaborative robotics
+- Autonomous systems
+- Distributed AI systems
 
 ## Acknowledgments
 
