@@ -10,7 +10,7 @@ import time
 import numpy as np
 from copy import copy
 
-from configs.reward_config import REWARD_CONFIG_V1, REWARD_CONFIG_V2, REWARD_CONFIG_HUMAN_V1, REWARD_CONFIG_HUMAN_V2
+from configs.reward_config import REWARD_CONFIG_HUMAN_V1, REWARD_CONFIG_HUMAN_V2
 
 
 # Standard RGB colors 
@@ -260,8 +260,7 @@ class PygameEnvironment(ParallelEnv):
             self.failure_effect_timer = self.effect_duration
             truncations = {"agent": True, "human": True}
 
-        rewards, terminations = self.calculate_reward(human_old_dist, 
-                                                      agent_action, agent_old_row, agent_old_col, 
+        rewards, terminations = self.calculate_reward(agent_action, agent_old_row, agent_old_col, 
                                                       human_action, human_old_row, human_old_col)
 
         # Get observations
@@ -366,7 +365,7 @@ class PygameEnvironment(ParallelEnv):
         
         return self.screen
 
-    def calculate_reward(self, human_old_dist, agent_action, agent_old_row, agent_old_col, human_action, human_old_row, human_old_col):
+    def calculate_reward(self, agent_action, agent_old_row, agent_old_col, human_action, human_old_row, human_old_col):
         """Calculate reward based on game state changes.
         
         Args:
@@ -375,34 +374,15 @@ class PygameEnvironment(ParallelEnv):
         Returns:
             tuple: (reward, terminated)
         """
-        pos_reward = 0
-        neg_reward = 0
+        reward = 0
         human_reward = 0
         terminations = {"agent": False, "human": False}
-
-        # Add time-based penalty to encourage faster completion
-        #neg_reward += self.reward_config["time_penalty"]
-        #human_reward += self.reward_config["time_penalty"]
-        
-        human_new_dist = self.calculate_manhattan_distance(self.human, self.goal)
-
-        if human_new_dist < human_old_dist:
-            # Human moved closer to goal
-            pos_reward += self.reward_config["human_progress_base"]  # Significant reward for successfully guiding the human
-        elif human_new_dist >= human_old_dist:
-            # Human moved away from goal
-            neg_reward += self.reward_config["human_progress_penalty"]
-
-        # Light-based rewards
-        pos_light_reward, neg_light_reward = self.calculate_light_reward()
-        pos_reward += pos_light_reward
-        neg_reward += neg_light_reward
 
         # Penalise trying to move outside of the grid
         agent_current_row, agent_current_col = self.get_current_row_col(self.agent)
         if agent_current_row == agent_old_row and agent_current_col == agent_old_col:
             if agent_action == AgentAction.MOVE_UP.value or agent_action == AgentAction.MOVE_RIGHT.value or agent_action == AgentAction.MOVE_DOWN.value or agent_action == AgentAction.MOVE_LEFT.value:
-                neg_reward += self.reward_config["bump_penalty"]
+                reward += self.reward_config["bump_penalty"]
         
         human_current_row, human_current_col = self.get_current_row_col(self.human)
         if human_current_row == human_old_row and human_current_col == human_old_col:
@@ -411,79 +391,26 @@ class PygameEnvironment(ParallelEnv):
 
         # Special state rewards
         if self.human.center == self.agent.center:
-            neg_reward += self.reward_config["collision_penalty"]
+            reward += self.reward_config["collision_penalty"]
             self.score += self.reward_config["collision_penalty"]
             self.ep_collisions += 1
         elif self.human.center == self.goal.center:
             speed_bonus = (self.step_limit - self.agent_step) // 10
-            #progress_ratio = 1 - (self.agent_step / self.step_limit)
-            #speed_bonus = 1 + min(1, max(0, progress_ratio))  # Ensures non-negative
 
-            pos_reward += self.reward_config["goal_reward_base"] + speed_bonus
+            reward += self.reward_config["goal_reward_base"] + speed_bonus
             human_reward += self.reward_config["goal_human_bonus"] + speed_bonus
             self.score += self.reward_config["goal_reward_base"]
             terminations = {"agent": True, "human": True}
 
-        G_A_dist = self.calculate_manhattan_distance(self.goal, self.agent)
         H_A_dist = self.calculate_manhattan_distance(self.human, self.agent)
-        H_G_dist = self.calculate_manhattan_distance(self.human, self.goal)
-        max_manhattan_dist = (self.n_cols - 1 + self.n_rows - 1)
 
         if H_A_dist <= 3:
-            pos_reward += self.reward_config["proximity_reward"]
-            human_reward += self.reward_config["proximity_reward"]
             human_reward += self.reward_config["human_proximity_reward"]
             human_reward += self.calculate_human_light_reward()
-        
-        reward = pos_reward + neg_reward
 
         # Return a dictionary of rewards:
         rewards = {"agent": reward, "human": human_reward}
         return rewards, terminations
-    
-    def calculate_light_reward(self):
-        """Calculate reward based on light signals guiding human toward goal."""
-        pos_light_reward = 0
-        neg_light_reward = 0
-        
-        # Get the relative position of the goal compared to the agent
-        agent_row, agent_col = self.get_current_row_col(self.agent)
-        goal_row, goal_col = self.get_current_row_col(self.goal)
-        
-        # Calculate directional differences
-        row_diff = goal_row - agent_row  # Positive if goal is below agent
-        col_diff = goal_col - agent_col  # Positive if goal is to the right of agent
-        
-        # Reward for correct light signals
-        if row_diff > 0 and self.light_b == self.LIGHT_ON:  # Goal is below
-            pos_light_reward += self.reward_config["light_correct"]
-        if row_diff < 0 and self.light_t == self.LIGHT_ON:  # Goal is above
-            pos_light_reward += self.reward_config["light_correct"]
-        if col_diff > 0 and self.light_r == self.LIGHT_ON:  # Goal is to the right
-            pos_light_reward += self.reward_config["light_correct"]
-        if col_diff < 0 and self.light_l == self.LIGHT_ON:  # Goal is to the left
-            pos_light_reward += self.reward_config["light_correct"]
-        
-        num_lights_on = sum([
-            self.light_t == self.LIGHT_ON,
-            self.light_b == self.LIGHT_ON,
-            self.light_l == self.LIGHT_ON,
-            self.light_r == self.LIGHT_ON
-        ])
-
-        pos_light_reward *= min(1, 1.25 - (num_lights_on / 4))
-
-        # Penalize incorrect light signals
-        if row_diff <= 0 and self.light_b == self.LIGHT_ON:  # Goal is not below
-            neg_light_reward += self.reward_config["light_incorrect"]
-        if row_diff >= 0 and self.light_t == self.LIGHT_ON:  # Goal is not above
-            neg_light_reward += self.reward_config["light_incorrect"]
-        if col_diff <= 0 and self.light_r == self.LIGHT_ON:  # Goal is not to the right
-            neg_light_reward += self.reward_config["light_incorrect"]
-        if col_diff >= 0 and self.light_l == self.LIGHT_ON:  # Goal is not to the left
-            neg_light_reward += self.reward_config["light_incorrect"]
-        
-        return pos_light_reward, neg_light_reward
     
     def calculate_human_light_reward(self):
         pos_light_reward = 0

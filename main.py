@@ -10,9 +10,9 @@ from stable_baselines3.common.evaluation import evaluate_policy
 
 import supersuit as ss
 
-from env.multi_pygame_env import PygameEnvironment
-from env.callbacks.train_callback import TrainLogger
-from tuning import define_model
+from env.pygame_env import PygameEnvironment
+from callbacks.train_callback import TrainLogger
+from helpers.tuning import define_model
 
 import optuna
 from pettingzoo.test import parallel_api_test
